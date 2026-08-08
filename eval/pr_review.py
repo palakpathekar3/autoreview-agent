@@ -1,5 +1,6 @@
 """PR-aware code review engine."""
 
+from eval.report import build_review_report
 from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
 
@@ -16,4 +17,10 @@ def review_python_file(source_code, patch):
         for finding in findings
         if finding.get("line") in added_line_numbers
     ]
+
+
+def review_python_file_report(source_code, patch):
+    """Return a Markdown report for the changed Python code."""
+    findings = review_python_file(source_code, patch)
+    return build_review_report(findings)
 
