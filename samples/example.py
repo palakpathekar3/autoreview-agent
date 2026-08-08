@@ -16,3 +16,7 @@ class Person:
     def speak(self):
         """Speak."""
         print("Hi")
+
+def test_auto_review():
+    message = "AutoReview test"
+    return message
