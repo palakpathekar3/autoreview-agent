@@ -18,5 +18,6 @@ class Person:
         print("Hi")
 
 def test_auto_review():
+    print("Debug message")
     message = "AutoReview test"
     return message
