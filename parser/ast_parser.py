@@ -1,30 +1,67 @@
 #!/usr/bin/env python3
 
-import json
-
 from tree_sitter import Language, Parser
 import tree_sitter_python
 
 
 PY_LANGUAGE = Language(tree_sitter_python.language())
 
-parser = Parser()
-parser.language = PY_LANGUAGE
+
+def create_parser():
+    """Create and configure a Tree-sitter Python parser."""
+    parser = Parser()
+    parser.language = PY_LANGUAGE
+    return parser
 
 
-with open("samples/example.py", "rb") as f:
-    source = f.read()
+def analyze_python_code(source_code):
+    """Analyze Python source code and return discovered functions and classes."""
+    if isinstance(source_code, str):
+        source_code = source_code.encode("utf-8")
 
-tree = parser.parse(source)
+    parser = create_parser()
+    tree = parser.parse(source_code)
+
+    functions = []
+    classes = []
+
+    def walk(node):
+        if node.type == "function_definition":
+            name_node = node.child_by_field_name("name")
+
+            if name_node:
+                name = source_code[
+                    name_node.start_byte:name_node.end_byte
+                ].decode("utf-8")
+
+                functions.append(name)
+
+        elif node.type == "class_definition":
+            name_node = node.child_by_field_name("name")
+
+            if name_node:
+                name = source_code[
+                    name_node.start_byte:name_node.end_byte
+                ].decode("utf-8")
+
+                classes.append(name)
+
+        for child in node.children:
+            walk(child)
+
+    walk(tree.root_node)
+
+    return {
+        "functions": functions,
+        "classes": classes,
+    }
 
 
-def walk(node):
-    if node.type == "function_definition":
-        name_node = node.child_by_field_name("name")
-        print("Function:", source[name_node.start_byte:name_node.end_byte].decode())
+if __name__ == "__main__":
+    with open("samples/example.py", "rb") as file:
+        source = file.read()
 
-    for child in node.children:
-        walk(child)
+    result = analyze_python_code(source)
 
-
-walk(tree.root_node)
+    print("Functions:", result["functions"])
+    print("Classes:", result["classes"])
