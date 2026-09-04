@@ -20,3 +20,5 @@ def extract_changed_files(payload):
         )
 
     return changed_files
+
+print("AutoReview webhook test")
