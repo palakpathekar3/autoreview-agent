@@ -1,6 +1,6 @@
 """GitHub PR comment integration."""
 
-import os
+from autoreview.config import settings
 
 from github import Auth, Github
 
@@ -10,7 +10,7 @@ from eval.pr_review import review_python_file_report
 def post_review_comment(repo_name, pr_number):
     """Review changed Python files and post a Markdown report to the PR."""
 
-    auth = Auth.Token(os.environ["GITHUB_TOKEN"])
+    auth = Auth.Token(settings.GITHUB_TOKEN)
     github = Github(auth=auth)
 
     repo = github.get_repo(repo_name)
