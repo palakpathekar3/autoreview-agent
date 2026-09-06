@@ -21,6 +21,20 @@ def run_python_rules(source_code):
         return findings
 
     for node in ast.walk(tree):
+
+        # Rule 1: Detect literal division by zero
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                findings.append(
+                    {
+                        "severity": "error",
+                        "rule": "division-by-zero",
+                        "message": "Division by zero will raise ZeroDivisionError.",
+                        "line": node.lineno,
+                    }
+                )
+
+        # Rule 2: Detect very long functions
         if isinstance(node, ast.FunctionDef):
             if len(node.body) > 20:
                 findings.append(
@@ -32,6 +46,7 @@ def run_python_rules(source_code):
                     }
                 )
 
+        # Rule 3: Detect print() statements
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "print":
                 findings.append(

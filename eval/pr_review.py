@@ -1,12 +1,12 @@
-"""PR-aware code review engine."""
-
+from agent.reviewer import review_code
 from eval.report import build_review_report
 from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
 
 
 def review_python_file(source_code, patch):
-    """Review only code introduced by a pull request."""
+    """Run deterministic rules only on changed Python lines."""
+
     added_lines = extract_added_lines(patch)
     added_line_numbers = {item["line"] for item in added_lines}
 
@@ -20,7 +20,22 @@ def review_python_file(source_code, patch):
 
 
 def review_python_file_report(source_code, patch):
-    """Return a Markdown report for the changed Python code."""
-    findings = review_python_file(source_code, patch)
-    return build_review_report(findings)
+    """Build an AI-enhanced review report."""
 
+    findings = review_python_file(source_code, patch)
+
+    if not findings:
+        return build_review_report(findings)
+
+    ai_review = review_code(source_code, findings)
+
+    base_report = build_review_report(findings)
+
+    if ai_review.strip() == "NO ISSUES FOUND":
+        return (
+            f"{base_report}\n\n"
+            "### AI Explanation\n\n"
+            "AI could not provide an explanation for the detected finding."
+        )
+
+    return f"{base_report}\n\n### AI Explanation\n\n{ai_review}"
