@@ -29,8 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run AutoReview
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run tests
         run: |
-          python -c "from eval.github_comment import post_review_comment; post_review_comment('${{ github.repository }}', ${{ github.event.pull_request.number }})"
+          python -m pytest
