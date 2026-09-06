@@ -39,16 +39,20 @@ Explanation: <short explanation>
 Suggestion: <practical fix>
 """
 
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False,
-        },
-        timeout=120,
-    )
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=120,
+        )
 
-    response.raise_for_status()
+        response.raise_for_status()
 
-    return response.json()["response"]
+        return response.json()["response"]
+
+    except requests.RequestException:
+        return "AI review unavailable: local Ollama service is not reachable."
