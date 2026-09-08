@@ -16,3 +16,5 @@ class Person:
     def speak(self):
         """Speak."""
         print("Hi")
+
+print("AutoReview webhook test")
