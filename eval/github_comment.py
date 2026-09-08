@@ -7,8 +7,11 @@ from github import Auth, Github
 from eval.pr_review import review_python_file_report
 
 
+AUTOREVIEW_MARKER = "## AutoReview"
+
+
 def post_review_comment(repo_name, pr_number):
-    """Review changed Python files and post a Markdown report to the PR."""
+    """Review changed Python files and update one AutoReview PR comment."""
 
     auth = Auth.Token(settings.GITHUB_TOKEN)
     github = Github(auth=auth)
@@ -43,10 +46,33 @@ def post_review_comment(repo_name, pr_number):
         )
 
     if not reports:
-        report = "## AutoReview\n\nNo Python files were changed."
+        report = (
+            f"{AUTOREVIEW_MARKER}\n\n"
+            "No Python files were changed."
+        )
     else:
-        report = "\n\n---\n\n".join(reports)
+        report = (
+            f"{AUTOREVIEW_MARKER}\n\n"
+            + "\n\n---\n\n".join(reports)
+        )
 
-    comment = pr.create_issue_comment(report)
+    # Find an existing AutoReview comment from this GitHub user.
+    current_user = github.get_user().login
+    existing_comment = None
 
-    return comment
+    for comment in pr.get_issue_comments():
+        if not comment.user:
+            continue
+
+        if comment.user.login != current_user:
+            continue
+
+        if AUTOREVIEW_MARKER in comment.body:
+            existing_comment = comment
+            break
+
+    if existing_comment:
+        existing_comment.edit(report)
+        return existing_comment
+
+    return pr.create_issue_comment(report)
