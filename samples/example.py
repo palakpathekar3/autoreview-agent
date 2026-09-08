@@ -17,4 +17,3 @@ class Person:
         """Speak."""
         print("Hi")
 
-print("AutoReview webhook test")
