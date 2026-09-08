@@ -9,6 +9,15 @@ OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODEL_NAME = "qwen2.5-coder:1.5b"
 
 
+def normalize_rule(rule: str) -> str:
+    """Normalize a rule name for validation."""
+    rule = rule.strip().lower()
+    rule = rule.replace("_", "-")
+    rule = rule.replace(" ", "-")
+    rule = rule.strip("`*")
+    return rule
+
+
 def review_code(code: str, findings: list[dict] | None = None) -> str:
     """Explain deterministic findings using a local AI model."""
 
@@ -18,7 +27,7 @@ def review_code(code: str, findings: list[dict] | None = None) -> str:
         return "NO ISSUES FOUND"
 
     expected_rules = [
-        finding.get("rule", "").lower()
+        normalize_rule(finding.get("rule", ""))
         for finding in findings
         if finding.get("rule")
     ]
@@ -38,13 +47,12 @@ STRICT RULES:
 - Do NOT repeat a rule.
 - Do NOT add unrelated Python advice.
 - Do NOT suggest renaming variables.
-- Do NOT suggest adding docstrings unless the listed rule is about docstrings.
+- Do NOT suggest adding docstrings.
 - Give one short explanation for each listed rule.
 - Give one practical fix for each listed rule.
 - Preserve the intended behavior of the code.
 - Suggest the smallest practical fix.
 - Start directly with the first Rule.
-- Never repeat these instructions.
 
 Allowed rules:
 {expected_rules}
@@ -55,12 +63,18 @@ Deterministic findings:
 Python code:
 {code}
 
-For every finding use exactly this format:
+For every finding use this format:
 
-Rule: <rule>
+Rule: <exact rule name>
 Severity: <severity>
 Explanation: <why this finding is a problem>
 Suggestion: <practical fix>
+
+Important:
+- Use the exact rule name from Allowed rules.
+- Do not change hyphens to underscores.
+- Do not add extra rules.
+- Do not repeat rules.
 """
 
     try:
@@ -81,13 +95,34 @@ Suggestion: <practical fix>
         if not result:
             return "AI explanation unavailable."
 
-        result_lower = result.lower()
+        # Find Rule lines while allowing common Markdown formatting.
+        rule_pattern = re.compile(
+            r"(?im)"
+            r"^\s*"
+            r"(?:\*\*)?"
+            r"Rule:"
+            r"(?:\*\*)?"
+            r"\s*"
+            r"(?:`)?"
+            r"([a-zA-Z0-9_-]+)"
+            r"(?:`)?"
+        )
 
-        # Check that every deterministic rule was explained.
+        ai_rules_raw = rule_pattern.findall(result)
+
+        ai_rules = [
+            normalize_rule(rule)
+            for rule in ai_rules_raw
+        ]
+
+        expected_set = set(expected_rules)
+        ai_set = set(ai_rules)
+
+        # Check for missing rules.
         missing_rules = [
             rule
             for rule in expected_rules
-            if rule not in result_lower
+            if rule not in ai_set
         ]
 
         if missing_rules:
@@ -96,19 +131,11 @@ Suggestion: <practical fix>
                 "the model did not explain all detected findings."
             )
 
-        # Extract every Rule: line returned by the model.
-        ai_rules = re.findall(
-            r"(?im)^Rule:\s*([a-z0-9_-]+)",
-            result,
-        )
-
-        ai_rules = [rule.lower() for rule in ai_rules]
-
-        # Reject invented rules.
+        # Check for unsupported rules.
         invalid_rules = [
             rule
             for rule in ai_rules
-            if rule not in expected_rules
+            if rule not in expected_set
         ]
 
         if invalid_rules:
@@ -117,15 +144,15 @@ Suggestion: <practical fix>
                 "the model returned unsupported review rules."
             )
 
-        # Reject duplicate explanations.
+        # Check duplicate rules.
         if len(ai_rules) != len(set(ai_rules)):
             return (
                 "AI explanation unavailable: "
                 "the model repeated a review rule."
             )
 
-        # Make sure the number of AI rules matches deterministic findings.
-        if set(ai_rules) != set(expected_rules):
+        # Check exact rule coverage.
+        if ai_set != expected_set:
             return (
                 "AI explanation unavailable: "
                 "the AI explanation does not match the detected findings."
@@ -134,4 +161,7 @@ Suggestion: <practical fix>
         return result
 
     except requests.RequestException:
-        return "AI review unavailable: local Ollama service is not reachable."
+        return (
+            "AI review unavailable: "
+            "local Ollama service is not reachable."
+        )
