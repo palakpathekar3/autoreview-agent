@@ -4,8 +4,18 @@ from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
 
 
-def review_python_file(source_code, patch):
+def review_python_file(source_code, patch, filename=None):
     """Run deterministic rules only on changed Python lines."""
+
+    # Test files normally contain assert statements by design.
+    # Skip them to avoid false-positive production-code warnings.
+    if filename and (
+        filename.startswith("tests/")
+        or filename.startswith("test_")
+        or "/tests/" in filename
+        or filename.endswith("_test.py")
+    ):
+        return []
 
     added_lines = extract_added_lines(patch)
     added_line_numbers = {item["line"] for item in added_lines}
@@ -19,10 +29,14 @@ def review_python_file(source_code, patch):
     ]
 
 
-def review_python_file_report(source_code, patch):
+def review_python_file_report(source_code, patch, filename=None):
     """Build an AI-enhanced review report."""
 
-    findings = review_python_file(source_code, patch)
+    findings = review_python_file(
+        source_code,
+        patch,
+        filename,
+    )
 
     if not findings:
         return build_review_report(findings)

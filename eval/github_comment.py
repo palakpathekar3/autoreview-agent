@@ -35,6 +35,7 @@ def post_review_comment(repo_name, pr_number):
         report = review_python_file_report(
             source_code,
             file.patch,
+            filename=file.filename,
         )
 
         reports.append(
