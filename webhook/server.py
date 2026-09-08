@@ -1,8 +1,11 @@
-from fastapi import FastAPI, Request, HTTPException
 import hashlib
 import hmac
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+
 from autoreview.config import settings
 from eval.github_comment import post_review_comment
+
 
 app = FastAPI()
 
@@ -12,6 +15,8 @@ def verify_signature(
     signature: str,
     secret: str,
 ) -> bool:
+    """Verify GitHub webhook HMAC signature."""
+
     expected = "sha256=" + hmac.new(
         secret.encode("utf-8"),
         payload,
@@ -21,13 +26,27 @@ def verify_signature(
     return hmac.compare_digest(expected, signature)
 
 
+def process_pull_request_review(
+    repo_name: str,
+    pr_number: int,
+) -> None:
+    """Run AutoReview outside the webhook request."""
+
+    post_review_comment(repo_name, pr_number)
+
+
 @app.get("/")
 def home() -> dict[str, str]:
     return {"message": "AutoReview API Running"}
 
 
 @app.post("/webhook")
-async def github_webhook(request: Request) -> dict[str, object]:
+async def github_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    """Receive and validate GitHub webhook events."""
+
     signature = request.headers.get("X-Hub-Signature-256")
     event = request.headers.get("X-GitHub-Event")
 
@@ -61,8 +80,16 @@ async def github_webhook(request: Request) -> dict[str, object]:
         pr_number = pull_request.get("number")
         repo_name = repository.get("full_name")
 
-        if action in {"opened", "synchronize"}:
-            post_review_comment(repo_name, pr_number)
+        if (
+            action in {"opened", "synchronize"}
+            and repo_name
+            and pr_number
+        ):
+            background_tasks.add_task(
+                process_pull_request_review,
+                repo_name,
+                pr_number,
+            )
 
         return {
             "status": "received",
@@ -71,4 +98,8 @@ async def github_webhook(request: Request) -> dict[str, object]:
             "repository": repo_name,
             "pr_number": pr_number,
         }
-    return {"status": "received", "event": event}
+
+    return {
+        "status": "received",
+        "event": event,
+    }
