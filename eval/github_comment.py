@@ -56,23 +56,29 @@ def post_review_comment(repo_name, pr_number):
             + "\n\n---\n\n".join(reports)
         )
 
-    # Find an existing AutoReview comment from this GitHub user.
+    # Find the current GitHub user.
     current_user = github.get_user().login
-    existing_comment = None
 
-    for comment in pr.get_issue_comments():
-        if not comment.user:
-            continue
+    # Find all existing AutoReview comments created by this user.
+    matching_comments = [
+        comment
+        for comment in pr.get_issue_comments()
+        if (
+            comment.user
+            and comment.user.login == current_user
+            and AUTOREVIEW_MARKER in comment.body
+        )
+    ]
 
-        if comment.user.login != current_user:
-            continue
+    if matching_comments:
+        # Update the most recently created AutoReview comment.
+        existing_comment = max(
+            matching_comments,
+            key=lambda comment: comment.created_at,
+        )
 
-        if AUTOREVIEW_MARKER in comment.body:
-            existing_comment = comment
-            break
-
-    if existing_comment:
         existing_comment.edit(report)
         return existing_comment
 
+    # No previous AutoReview comment exists.
     return pr.create_issue_comment(report)
