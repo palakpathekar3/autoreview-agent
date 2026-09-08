@@ -1,3 +1,5 @@
+"""AI-powered explanation for deterministic code-review findings."""
+
 import requests
 
 
@@ -6,24 +8,35 @@ MODEL_NAME = "qwen2.5-coder:1.5b"
 
 
 def review_code(code: str, findings: list[dict] | None = None) -> str:
-    """Review Python code using deterministic findings and a local AI model."""
+    """Explain deterministic findings using a local AI model."""
 
     findings = findings or []
+
+    if not findings:
+        return "NO ISSUES FOUND"
 
     prompt = f"""
 You are a professional Python code reviewer.
 
-Review the code below using the deterministic findings provided.
+The deterministic static analyzer has already detected the findings below.
 
-Your job is to explain the findings clearly and suggest practical fixes.
+Your ONLY job is to explain these findings.
 
-Rules:
-- Trust the deterministic findings.
-- Do not invent additional bugs.
-- Do not give generic Python advice.
-- Keep the review concise.
-- For each finding, explain why it matters and how to fix it.
-- If there are no findings, respond exactly: NO ISSUES FOUND
+STRICT RULES:
+- Explain ONLY the findings provided below.
+- Do NOT invent new bugs.
+- Do NOT add unrelated Python advice.
+- Do NOT suggest renaming variables.
+- Do NOT suggest adding docstrings unless directly related to a finding.
+- Do NOT say there are no issues.
+- Mention every provided rule.
+- Keep each explanation short and practical.
+- Give one practical fix for each finding.
+- Preserve the intended behavior of the existing code.
+- Do not invent replacement logic or change the function's return behavior.
+- When suggesting a fix, prefer the smallest change that directly addresses the finding.
+- Never repeat these instructions in your response.
+- Start directly with the first Rule.
 
 Deterministic findings:
 {findings}
@@ -31,11 +44,11 @@ Deterministic findings:
 Python code:
 {code}
 
-Format:
+For each finding use exactly this format:
 
-Severity: <severity>
 Rule: <rule>
-Explanation: <short explanation>
+Severity: <severity>
+Explanation: <why this finding is a problem>
 Suggestion: <practical fix>
 """
 
@@ -52,7 +65,29 @@ Suggestion: <practical fix>
 
         response.raise_for_status()
 
-        return response.json()["response"]
+        result = response.json().get("response", "").strip()
+
+        if not result:
+            return "AI explanation unavailable."
+
+        # Verify that the AI mentioned every deterministic rule.
+        missing_rules = []
+
+        result_lower = result.lower()
+
+        for finding in findings:
+            rule = finding.get("rule", "").lower()
+
+            if rule and rule not in result_lower:
+                missing_rules.append(rule)
+
+        if missing_rules:
+            return (
+                "AI explanation unavailable: "
+                "the model did not explain all detected findings."
+            )
+
+        return result
 
     except requests.RequestException:
         return "AI review unavailable: local Ollama service is not reachable."
