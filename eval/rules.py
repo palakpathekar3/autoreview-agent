@@ -3,6 +3,61 @@
 import ast
 
 
+def _is_constant_zero(node, constants):
+    """Return True when an expression is known to evaluate to zero."""
+    if isinstance(node, ast.Constant):
+        return node.value == 0
+
+    if isinstance(node, ast.Name):
+        return constants.get(node.id) == 0
+
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, (ast.Sub, ast.Add)):
+            left = _get_constant_value(node.left, constants)
+            right = _get_constant_value(node.right, constants)
+
+            if left is not None and right is not None:
+                return (
+                    left - right == 0
+                    if isinstance(node.op, ast.Sub)
+                    else left + right == 0
+                )
+
+    return False
+
+
+def _get_constant_value(node, constants):
+    """Return a known constant value, otherwise None."""
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float, complex)):
+            return node.value
+
+        return None
+
+    if isinstance(node, ast.Name):
+        return constants.get(node.id)
+
+    if isinstance(node, ast.BinOp):
+        left = _get_constant_value(node.left, constants)
+        right = _get_constant_value(node.right, constants)
+
+        if left is None or right is None:
+            return None
+
+        if isinstance(node.op, ast.Add):
+            return left + right
+
+        if isinstance(node.op, ast.Sub):
+            return left - right
+
+        if isinstance(node.op, ast.Mult):
+            return left * right
+
+        return None
+
+    return None
+
+
 def run_python_rules(source_code):
     """Run basic static-analysis rules on Python source code."""
     findings = []
@@ -20,14 +75,27 @@ def run_python_rules(source_code):
         )
         return findings
 
+    constants = {}
+
     for node in ast.walk(tree):
 
-        # Rule 1: Detect literal division by zero
+        # Track simple constant assignments.
+        if isinstance(node, ast.Assign):
+            value = _get_constant_value(
+                node.value,
+                constants,
+            )
+
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    if value is not None:
+                        constants[target.id] = value
+                    else:
+                        constants.pop(target.id, None)
+
+        # Rule 1: Detect division by zero.
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-            if (
-                isinstance(node.right, ast.Constant)
-                and node.right.value == 0
-            ):
+            if _is_constant_zero(node.right, constants):
                 findings.append(
                     {
                         "severity": "error",
@@ -39,7 +107,7 @@ def run_python_rules(source_code):
                     }
                 )
 
-        # Rule 2: Detect very long functions
+        # Rule 2: Detect very long functions.
         if isinstance(node, ast.FunctionDef):
             if len(node.body) > 20:
                 findings.append(
@@ -51,7 +119,7 @@ def run_python_rules(source_code):
                     }
                 )
 
-        # Rule 3: Detect print() statements
+        # Rule 3: Detect print() statements.
         if isinstance(node, ast.Call):
             if (
                 isinstance(node.func, ast.Name)
@@ -68,7 +136,7 @@ def run_python_rules(source_code):
                     }
                 )
 
-        # Rule 4: Detect possible hardcoded secrets
+        # Rule 4: Detect possible hardcoded secrets.
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name):
@@ -103,7 +171,7 @@ def run_python_rules(source_code):
                                 }
                             )
 
-        # Rule 5: Detect dangerous eval() and exec() usage
+        # Rule 5: Detect dangerous eval() and exec() usage.
         if isinstance(node, ast.Call):
             if (
                 isinstance(node.func, ast.Name)
@@ -121,7 +189,7 @@ def run_python_rules(source_code):
                     }
                 )
 
-        # Rule 6: Detect bare except
+        # Rule 6: Detect bare except.
         if isinstance(node, ast.ExceptHandler):
             if node.type is None:
                 findings.append(
@@ -136,12 +204,15 @@ def run_python_rules(source_code):
                     }
                 )
 
-        # Rule 7: Detect mutable default arguments
+        # Rule 7: Detect mutable default arguments.
         if isinstance(node, ast.FunctionDef):
             defaults = node.args.defaults
 
             for default in defaults:
-                if isinstance(default, (ast.List, ast.Dict, ast.Set)):
+                if isinstance(
+                    default,
+                    (ast.List, ast.Dict, ast.Set),
+                ):
                     findings.append(
                         {
                             "severity": "warning",
@@ -154,7 +225,7 @@ def run_python_rules(source_code):
                         }
                     )
 
-        # Rule 8: Detect assert statements
+        # Rule 8: Detect assert statements.
         if isinstance(node, ast.Assert):
             findings.append(
                 {

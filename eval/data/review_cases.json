@@ -1,0 +1,80 @@
+[
+  {
+    "name": "division_by_zero",
+    "code": "def calculate(a):\n    result = a / 0\n    return result\n",
+    "expected_rules": [
+      "division-by-zero"
+    ]
+  },
+  {
+    "name": "print_statement",
+    "code": "def hello():\n    print('Hello')\n",
+    "expected_rules": [
+      "print-statement"
+    ]
+  },
+  {
+    "name": "multiple_issues",
+    "code": "def calculate(a):\n    result = a / 0\n    print(result)\n    return result\n",
+    "expected_rules": [
+      "division-by-zero",
+      "print-statement"
+    ]
+  },
+  {
+    "name": "clean_code",
+    "code": "def add(a, b):\n    return a + b\n",
+    "expected_rules": []
+  },
+  {
+    "name": "valid_division",
+    "code": "def divide(a, b):\n    if b == 0:\n        return None\n    return a / b\n",
+    "expected_rules": []
+  },
+  {
+    "name": "logging_instead_of_print",
+    "code": "import logging\n\ndef hello():\n    logging.info('Hello')\n",
+    "expected_rules": []
+  },
+  {
+    "name": "safe_function",
+    "code": "def multiply(a, b):\n    result = a * b\n    return result\n",
+    "expected_rules": []
+  },
+  {
+    "name": "division_by_zero_inside_condition",
+    "code": "def calculate(a):\n    if a == 0:\n        return 0\n    return 10 / a\n",
+    "expected_rules": []
+  },
+  {
+    "name": "print_word_in_string",
+    "code": "def message():\n    text = \"print('Hello')\"\n    return text\n",
+    "expected_rules": []
+  },
+  {
+    "name": "print_function_used",
+    "code": "def get_printer():\n    return print\n",
+    "expected_rules": []
+  },
+  {
+    "name": "indirect_zero_division",
+    "code": "def calculate(a):\n    divisor = 0\n    return a / divisor\n",
+    "expected_rules": [
+      "division-by-zero"
+    ]
+  },
+  {
+    "name": "zero_division_through_expression",
+    "code": "def calculate(a):\n    divisor = 1 - 1\n    return a / divisor\n",
+    "expected_rules": [
+      "division-by-zero"
+    ]
+  },
+  {
+    "name": "zero_division_through_variable",
+    "code": "def calculate(a):\n    zero = 0\n    result = a / zero\n    return result\n",
+    "expected_rules": [
+      "division-by-zero"
+    ]
+  }
+]

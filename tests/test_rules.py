@@ -61,3 +61,31 @@ def test_clean_code():
 """
     rules = get_rules(source)
     assert len(rules) == 0
+
+
+def test_variable_division_by_zero():
+    source = """def calculate(a):
+    divisor = 0
+    return a / divisor
+"""
+    rules = get_rules(source)
+    assert "division-by-zero" in rules
+
+
+def test_expression_division_by_zero():
+    source = """def calculate(a):
+    divisor = 1 - 1
+    return a / divisor
+"""
+    rules = get_rules(source)
+    assert "division-by-zero" in rules
+
+
+def test_constant_variable_division_by_zero():
+    source = """def calculate(a):
+    zero = 0
+    result = a / zero
+    return result
+"""
+    rules = get_rules(source)
+    assert "division-by-zero" in rules
