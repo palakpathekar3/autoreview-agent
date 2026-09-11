@@ -1,4 +1,4 @@
-from rag.langgraph_demo import review_code_with_langgraph
+from agent.review_graph import review_code_with_langgraph
 from eval.report import build_review_report
 from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
