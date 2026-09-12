@@ -7,6 +7,7 @@ import requests
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODEL_NAME = "qwen2.5-coder:1.5b"
+REQUEST_TIMEOUT = 180
 
 
 def normalize_rule(rule: str) -> str:
@@ -18,7 +19,10 @@ def normalize_rule(rule: str) -> str:
     return rule
 
 
-def review_code(code: str, findings: list[dict] | None = None) -> str:
+def review_code(
+    code: str,
+    findings: list[dict] | None = None,
+) -> str:
     """Explain deterministic findings using a local AI model."""
 
     findings = findings or []
@@ -33,48 +37,34 @@ def review_code(code: str, findings: list[dict] | None = None) -> str:
     ]
 
     prompt = f"""
-You are a professional Python code reviewer.
+Explain ONLY the detected code-review findings below.
 
-The deterministic static analyzer has already detected these findings.
-
-Your ONLY job is to explain these exact findings.
-
-STRICT RULES:
-- Explain ONLY the rules listed below.
-- Do NOT invent any new rule.
-- Do NOT mention any rule that is not listed below.
-- Mention each listed rule exactly once.
-- Do NOT repeat a rule.
-- Do NOT add unrelated Python advice.
-- Do NOT suggest renaming variables.
-- Do NOT suggest adding docstrings.
-- Give one short explanation for each listed rule.
-- Give one practical fix for each listed rule.
-- Preserve the intended behavior of the code.
-- Suggest the smallest practical fix.
-- Start directly with the first Rule.
-
-Allowed rules:
+Rules to explain:
 {expected_rules}
 
-Deterministic findings:
+Findings:
 {findings}
 
-Python code:
+Code:
 {code}
 
-For every finding use this format:
+Return EXACTLY one block for each rule.
+Do not add, remove, or repeat rules.
+
+Format:
 
 Rule: <exact rule name>
 Severity: <severity>
-Explanation: <why this finding is a problem>
-Suggestion: <practical fix>
+Explanation: <short explanation>
+Suggestion: <smallest practical fix>
 
-Important:
-- Use the exact rule name from Allowed rules.
-- Do not change hyphens to underscores.
-- Do not add extra rules.
-- Do not repeat rules.
+Requirements:
+- Use each rule exactly once.
+- Use the exact rule names provided.
+- Keep the same severity.
+- Do not invent other issues.
+- Do not give unrelated advice.
+- Do not use Markdown code fences.
 """
 
     try:
@@ -84,13 +74,22 @@ Important:
                 "model": MODEL_NAME,
                 "prompt": prompt,
                 "stream": False,
+                "options": {
+                    "temperature": 0,
+                },
             },
-            timeout=120,
+            timeout=REQUEST_TIMEOUT,
         )
 
         response.raise_for_status()
 
-        result = response.json().get("response", "").strip()
+        result = response.json().get(
+            "response",
+            "",
+        ).strip()
+
+        print("\nRAW AI RESPONSE:")
+        print(result)
 
         if not result:
             return "AI explanation unavailable."
@@ -126,6 +125,11 @@ Important:
         ]
 
         if missing_rules:
+            print(
+                "AI validation failed - "
+                f"missing rules: {missing_rules}"
+            )
+
             return (
                 "AI explanation unavailable: "
                 "the model did not explain all detected findings."
@@ -139,6 +143,11 @@ Important:
         ]
 
         if invalid_rules:
+            print(
+                "AI validation failed - "
+                f"unsupported rules: {invalid_rules}"
+            )
+
             return (
                 "AI explanation unavailable: "
                 "the model returned unsupported review rules."
@@ -146,6 +155,11 @@ Important:
 
         # Check duplicate rules.
         if len(ai_rules) != len(set(ai_rules)):
+            print(
+                "AI validation failed - "
+                "duplicate rules detected."
+            )
+
             return (
                 "AI explanation unavailable: "
                 "the model repeated a review rule."
@@ -153,14 +167,29 @@ Important:
 
         # Check exact rule coverage.
         if ai_set != expected_set:
+            print(
+                "AI validation failed - "
+                f"expected={expected_set}, "
+                f"received={ai_set}"
+            )
+
             return (
                 "AI explanation unavailable: "
-                "the AI explanation does not match the detected findings."
+                "the AI explanation does not match "
+                "the detected findings."
             )
 
         return result
 
-    except requests.RequestException:
+    except requests.Timeout:
+        return (
+            "AI review unavailable: "
+            "local Ollama request timed out."
+        )
+
+    except requests.RequestException as error:
+        print(f"OLLAMA ERROR: {error}")
+
         return (
             "AI review unavailable: "
             "local Ollama service is not reachable."
