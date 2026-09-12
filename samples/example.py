@@ -15,4 +15,7 @@ class Person:
 
     def speak(self):
         """Speak."""
-        print("Hi")
+        result = 10 / 0
+
+def hello():
+    print("Hello AutoReview")
