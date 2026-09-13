@@ -278,7 +278,12 @@ def build_fallback_review(
 def analyze_code(
     state: ReviewState,
 ) -> ReviewState:
-    """Run deterministic static-analysis rules."""
+    """Run deterministic static-analysis rules when findings are not provided."""
+
+    if state.get("findings"):
+        return {
+            "findings": state["findings"],
+        }
 
     findings = run_python_rules(
         state["code"]
@@ -644,13 +649,14 @@ def build_review_graph():
 def review_code_with_langgraph(
     source_code: str,
     file_name: str = "unknown.py",
+    findings: list[dict] | None = None,
 ) -> ReviewState:
     """Run the complete LangGraph code-review pipeline."""
 
     initial_state: ReviewState = {
         "code": source_code,
         "file_name": file_name,
-        "findings": [],
+        "findings": findings or [],
         "context": [],
         "review": "",
     }
