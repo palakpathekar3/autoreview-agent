@@ -420,52 +420,64 @@ def retrieve_context(
 def generate_review(
     state: ReviewState,
 ) -> ReviewState:
-    """Generate and validate AI explanations."""
+    """Generate AI explanations and use deterministic suggestions."""
 
     findings = state["findings"]
 
+    if not findings:
+        return {
+            "review": "NO ISSUES FOUND",
+        }
+
+    compact_findings = [
+        {
+            "rule": finding.get("rule", ""),
+            "severity": finding.get("severity", ""),
+            "message": finding.get("message", ""),
+            "line": finding.get("line"),
+        }
+        for finding in findings
+    ]
+
+    compact_context = [
+        {
+            "rule": item.get("rule"),
+            "file_name": item.get("file_name"),
+            "line_start": item.get("line_start"),
+            "line_end": item.get("line_end"),
+            "code": item.get("code", ""),
+        }
+        for item in state.get("context", [])
+    ]
+
     prompt = f"""
-You are a Python code-review explanation system.
+Explain these Python code-review findings.
 
-The deterministic analyzer is the ONLY source of truth.
+Findings:
+{compact_findings}
 
-Explain ONLY these findings:
+Code context:
+{compact_context}
 
-{findings}
+Rules:
+1. Explain every finding exactly once.
+2. Use the exact Rule name.
+3. Use the exact Severity.
+4. Explain only the actual finding.
+5. Use the provided code context.
+6. Do not invent variable names.
+7. Do not invent code examples.
+8. Do not provide a Suggestion.
+9. Do not output Python code.
+10. Do not use Markdown.
+11. Keep each Explanation to one short sentence.
+12. Output only Rule, Severity, and Explanation.
 
-Relevant code context:
+Required format:
 
-{state.get("context", [])}
-
-Python code:
-
-{state["code"]}
-
-STRICT OUTPUT RULES:
-
-- Explain every finding exactly once.
-- Do not invent rules.
-- Do not add rules.
-- Do not provide Python code.
-- Do not use Markdown code blocks.
-- Do not rewrite the code.
-- Do not provide an alternative implementation.
-- Do not add notes.
-- Do not add general advice.
-- Preserve the original intended behavior.
-- Use the exact rule name.
-- Use the exact severity.
-
-Output exactly:
-
-Rule: <exact rule name>
+Rule: <exact rule>
 Severity: <exact severity>
-Explanation: <short explanation>
-Suggestion: <short practical fix>
-
-Repeat these four lines once for every finding.
-
-Do not output anything before or after the findings.
+Explanation: <one sentence>
 """
 
     try:
@@ -477,6 +489,7 @@ Do not output anything before or after the findings.
                 "stream": False,
                 "options": {
                     "temperature": 0,
+                    "num_predict": 120,
                 },
             },
             timeout=120,
@@ -484,49 +497,108 @@ Do not output anything before or after the findings.
 
         response.raise_for_status()
 
-        review = response.json().get(
+        ai_response = response.json().get(
             "response",
             "",
         ).strip()
 
         print("\nRAW AI RESPONSE:")
-        print(review)
+        print(ai_response)
 
-        if validate_ai_review(
-            review,
-            findings,
-        ):
-            final_review = review
-        else:
-            print(
-                "\nAI output failed validation."
+        if not ai_response:
+            return {
+                "review": build_fallback_review(findings),
+            }
+
+        review_blocks = []
+
+        for finding in findings:
+            rule = finding.get("rule", "")
+            severity = finding.get("severity", "")
+            message = finding.get("message", "")
+
+            explanation = message
+
+            for block in ai_response.split("\n\n"):
+                if f"Rule: {rule}" in block:
+                    for line in block.splitlines():
+                        if line.strip().startswith("Explanation:"):
+                            explanation = line.split(
+                                "Explanation:",
+                                1,
+                            )[1].strip()
+                            break
+
+            suggestion_map = {
+                "division-by-zero": (
+                    "Use a valid non-zero divisor before performing the division."
+                ),
+                "print-statement": (
+                    "Use the logging module when application logging is required."
+                ),
+                "hardcoded-secret": (
+                    "Store secrets in environment variables or secure secret management."
+                ),
+                "dangerous-code-execution": (
+                    "Avoid eval() and exec() when dynamic code execution is not required."
+                ),
+                "bare-except": (
+                    "Catch specific exception types instead of using a bare except."
+                ),
+                "mutable-default-argument": (
+                    "Use None as the default and create the mutable object inside the function."
+                ),
+                "assert-statement": (
+                    "Use explicit validation and raise an appropriate exception for production input checks."
+                ),
+                "long-function": (
+                    "Split the function into smaller focused functions."
+                ),
+                "syntax-error": (
+                    "Fix the syntax error reported by the Python parser."
+                ),
+            }
+
+            suggestion = suggestion_map.get(
+                rule,
+                "Review the finding and apply an appropriate fix.",
             )
 
-            final_review = build_fallback_review(
-                findings
+            review_blocks.append(
+                f"Rule: {rule}\n"
+                f"Severity: {severity}\n"
+                f"Explanation: {explanation}\n"
+                f"Suggestion: {suggestion}"
             )
+
+        final_review = "\n\n".join(review_blocks)
+
+        return {
+            "review": final_review,
+        }
+
+    except requests.Timeout as error:
+        print(
+            "\nOLLAMA TIMEOUT:",
+            repr(error),
+        )
+        return {
+            "review": build_fallback_review(findings),
+        }
 
     except requests.RequestException as error:
         print(
             "\nOLLAMA ERROR:",
             repr(error),
         )
+        return {
+            "review": build_fallback_review(findings),
+        }
 
-        final_review = build_fallback_review(
-            findings
-        )
+def build_review_graph():
+    """Build the LangGraph review pipeline."""
 
-    return {
-        "review": final_review,
-    }
-
-
-def build_graph():
-    """Build and compile the LangGraph review pipeline."""
-
-    graph = StateGraph(
-        ReviewState
-    )
+    graph = StateGraph(ReviewState)
 
     graph.add_node(
         "analyze_code",
@@ -552,8 +624,7 @@ def build_graph():
         "analyze_code",
         should_review,
         {
-            "retrieve_context":
-                "retrieve_context",
+            "retrieve_context": "retrieve_context",
             END: END,
         },
     )
@@ -570,57 +641,20 @@ def build_graph():
 
     return graph.compile()
 
-
 def review_code_with_langgraph(
-    code: str,
+    source_code: str,
     file_name: str = "unknown.py",
 ) -> ReviewState:
-    """Run the complete LangGraph review pipeline."""
+    """Run the complete LangGraph code-review pipeline."""
 
-    app = build_graph()
+    initial_state: ReviewState = {
+        "code": source_code,
+        "file_name": file_name,
+        "findings": [],
+        "context": [],
+        "review": "",
+    }
 
-    return app.invoke(
-        {
-            "code": code,
-            "file_name": file_name,
-        }
-    )
+    graph = build_review_graph()
 
-
-if __name__ == "__main__":
-    code = """
-def calculate(a, b):
-    result = a / 0
-    print(result)
-    return result
-"""
-
-    result = review_code_with_langgraph(
-        code,
-        "example.py",
-    )
-
-    print("\nFindings:")
-
-    for finding in result.get(
-        "findings",
-        [],
-    ):
-        print(finding)
-
-    print("\nRetrieved Context:")
-
-    for context in result.get(
-        "context",
-        [],
-    ):
-        print(context)
-
-    print("\nAI Review:")
-
-    print(
-        result.get(
-            "review",
-            "No review generated.",
-        )
-    )
+    return graph.invoke(initial_state)
