@@ -4,24 +4,36 @@ from autoreview.config import settings
 
 from github import Auth, Github
 
-from eval.pr_review import review_python_file_report
+from eval.pr_review import review_pull_request
 
 
 AUTOREVIEW_MARKER = "## AutoReview"
 
 
 def post_review_comment(repo_name, pr_number):
-    """Review changed Python files and update one AutoReview PR comment."""
+    """Review changed Python files and update one AutoReview comment."""
 
-    auth = Auth.Token(settings.GITHUB_TOKEN)
-    github = Github(auth=auth)
+    auth = Auth.Token(
+        settings.GITHUB_TOKEN
+    )
 
-    repo = github.get_repo(repo_name)
-    pr = repo.get_pull(pr_number)
+    github = Github(
+        auth=auth
+    )
 
-    reports = []
+    repo = github.get_repo(
+        repo_name
+    )
+
+    pr = repo.get_pull(
+        pr_number
+    )
+
+    source_code_by_file = {}
+    patches_by_file = {}
 
     for file in pr.get_files():
+
         if not file.filename.endswith(".py"):
             continue
 
@@ -33,52 +45,52 @@ def post_review_comment(repo_name, pr_number):
             ref=pr.head.sha,
         )
 
-        source_code = contents.decoded_content.decode("utf-8")
-
-        report = review_python_file_report(
-            source_code,
-            file.patch,
-            filename=file.filename,
+        source_code = (
+            contents.decoded_content
+            .decode("utf-8")
         )
 
-        reports.append(
-            f"## `{file.filename}`\n\n{report}"
-        )
+        source_code_by_file[
+            file.filename
+        ] = source_code
 
-    if not reports:
-        report = (
-            f"{AUTOREVIEW_MARKER}\n\n"
-            "No Python files were changed."
-        )
-    else:
-        report = (
-            f"{AUTOREVIEW_MARKER}\n\n"
-            + "\n\n---\n\n".join(reports)
-        )
+        patches_by_file[
+            file.filename
+        ] = file.patch
 
-    # Find the current GitHub user.
-    current_user = github.get_user().login
+    report = review_pull_request(
+        source_code_by_file,
+        patches_by_file,
+    )
 
-    # Find all existing AutoReview comments created by this user.
+    current_user = (
+        github.get_user().login
+    )
+
     matching_comments = [
         comment
         for comment in pr.get_issue_comments()
         if (
             comment.user
             and comment.user.login == current_user
-            and AUTOREVIEW_MARKER in comment.body
+            and AUTOREVIEW_MARKER
+            in comment.body
         )
     ]
 
     if matching_comments:
-        # Update the most recently created AutoReview comment.
+
         existing_comment = max(
             matching_comments,
             key=lambda comment: comment.created_at,
         )
 
-        existing_comment.edit(report)
+        existing_comment.edit(
+            report
+        )
+
         return existing_comment
 
-    # No previous AutoReview comment exists.
-    return pr.create_issue_comment(report)
+    return pr.create_issue_comment(
+        report
+    )
