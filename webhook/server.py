@@ -10,6 +10,11 @@ from eval.github_comment import post_review_comment
 app = FastAPI()
 
 
+# Store GitHub delivery IDs that have already been processed.
+# This prevents the same webhook delivery from being processed twice.
+processed_deliveries: set[str] = set()
+
+
 def verify_signature(
     payload: bytes,
     signature: str,
@@ -23,7 +28,10 @@ def verify_signature(
         hashlib.sha256,
     ).hexdigest()
 
-    return hmac.compare_digest(expected, signature)
+    return hmac.compare_digest(
+        expected,
+        signature,
+    )
 
 
 def process_pull_request_review(
@@ -32,12 +40,17 @@ def process_pull_request_review(
 ) -> None:
     """Run AutoReview outside the webhook request."""
 
-    post_review_comment(repo_name, pr_number)
+    post_review_comment(
+        repo_name,
+        pr_number,
+    )
 
 
 @app.get("/")
 def home() -> dict[str, str]:
-    return {"message": "AutoReview API Running"}
+    return {
+        "message": "AutoReview API Running"
+    }
 
 
 @app.post("/webhook")
@@ -47,13 +60,28 @@ async def github_webhook(
 ) -> dict[str, object]:
     """Receive and validate GitHub webhook events."""
 
-    signature = request.headers.get("X-Hub-Signature-256")
-    event = request.headers.get("X-GitHub-Event")
+    signature = request.headers.get(
+        "X-Hub-Signature-256"
+    )
+
+    event = request.headers.get(
+        "X-GitHub-Event"
+    )
+
+    delivery_id = request.headers.get(
+        "X-GitHub-Delivery"
+    )
 
     if not signature:
         raise HTTPException(
             status_code=400,
             detail="Missing X-Hub-Signature-256 header",
+        )
+
+    if not delivery_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing X-GitHub-Delivery header",
         )
 
     body = await request.body()
@@ -70,18 +98,48 @@ async def github_webhook(
             detail="Invalid signature",
         )
 
+    # Ignore an already processed GitHub delivery.
+    if delivery_id in processed_deliveries:
+        return {
+            "status": "duplicate",
+            "delivery_id": delivery_id,
+        }
+
+    # Mark the delivery before starting background processing.
+    processed_deliveries.add(
+        delivery_id
+    )
+
     payload = await request.json()
 
     if event == "pull_request":
-        action = payload.get("action")
-        repository = payload.get("repository", {})
-        pull_request = payload.get("pull_request", {})
+        action = payload.get(
+            "action"
+        )
 
-        pr_number = pull_request.get("number")
-        repo_name = repository.get("full_name")
+        repository = payload.get(
+            "repository",
+            {},
+        )
+
+        pull_request = payload.get(
+            "pull_request",
+            {},
+        )
+
+        pr_number = pull_request.get(
+            "number"
+        )
+
+        repo_name = repository.get(
+            "full_name"
+        )
 
         if (
-            action in {"opened", "synchronize"}
+            action in {
+                "opened",
+                "synchronize",
+            }
             and repo_name
             and pr_number
         ):
@@ -97,9 +155,11 @@ async def github_webhook(
             "action": action,
             "repository": repo_name,
             "pr_number": pr_number,
+            "delivery_id": delivery_id,
         }
 
     return {
         "status": "received",
         "event": event,
+        "delivery_id": delivery_id,
     }
