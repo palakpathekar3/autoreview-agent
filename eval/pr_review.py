@@ -1,10 +1,14 @@
 from agent.review_graph import review_code_with_langgraph
-from eval.report import build_review_report
 from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
+from sandbox.docker_runner import run_python_in_docker
 
 
-def review_python_file(source_code, patch, filename=None):
+def review_python_file(
+    source_code,
+    patch,
+    filename=None,
+):
     """Run deterministic rules only on changed Python lines."""
 
     if filename and (
@@ -16,7 +20,10 @@ def review_python_file(source_code, patch, filename=None):
         return []
 
     added_lines = extract_added_lines(patch)
-    added_line_numbers = {item["line"] for item in added_lines}
+    added_line_numbers = {
+        item["line"]
+        for item in added_lines
+    }
 
     findings = run_python_rules(source_code)
 
@@ -46,7 +53,10 @@ def review_python_file(source_code, patch, filename=None):
                 if "=" not in added_content:
                     continue
 
-                left_side, right_side = added_content.split("=", 1)
+                left_side, right_side = added_content.split(
+                    "=",
+                    1,
+                )
 
                 variable_name = left_side.strip()
 
@@ -82,6 +92,86 @@ def collect_python_file_findings(
         }
         for finding in findings
     ]
+
+
+def run_sandbox(source_code):
+    """Execute Python source code inside Docker sandbox."""
+
+    return run_python_in_docker(
+        source_code,
+        timeout=10,
+    )
+
+
+def build_sandbox_report(
+    source_code_by_file,
+):
+    """Run changed Python files in Docker and summarize execution."""
+
+    results = []
+
+    for filename, source_code in source_code_by_file.items():
+
+        if not filename.endswith(".py"):
+            continue
+
+        result = run_sandbox(
+            source_code
+        )
+
+        if result["success"]:
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "passed",
+                    "message": "Sandbox execution completed successfully.",
+                }
+            )
+        elif result["return_code"] is None:
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "timeout",
+                    "message": result["stderr"],
+                }
+            )
+        else:
+            error_message = result["stderr"].strip()
+
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "failed",
+                    "message": error_message,
+                }
+            )
+
+    return results
+
+
+def format_sandbox_report(
+    sandbox_results,
+):
+    """Convert sandbox results into Markdown."""
+
+    if not sandbox_results:
+        return ""
+
+    lines = [
+        "### Docker Sandbox",
+        "",
+    ]
+
+    for result in sandbox_results:
+        filename = result["file_name"]
+        status = result["status"].upper()
+        message = result["message"]
+
+        lines.append(
+            f"- **{status}** — `{filename}` — {message}"
+        )
+
+    return "\n".join(lines)
 
 
 def build_pr_review(findings):
@@ -175,7 +265,7 @@ def review_pull_request(
     source_code_by_file,
     patches_by_file,
 ):
-    """Review all changed Python files with one AI call."""
+    """Review all changed Python files."""
 
     all_findings = []
 
@@ -200,7 +290,21 @@ def review_pull_request(
         all_findings
     )
 
+    sandbox_results = build_sandbox_report(
+        source_code_by_file
+    )
+
+    sandbox_report = format_sandbox_report(
+        sandbox_results
+    )
+
     if not all_findings:
+        if sandbox_report:
+            return (
+                f"{base_report}\n\n"
+                f"{sandbox_report}"
+            )
+
         return base_report
 
     ai_review = generate_pr_ai_review(
@@ -208,8 +312,15 @@ def review_pull_request(
         all_findings,
     )
 
-    return (
-        f"{base_report}\n\n"
-        "### AI Explanation\n\n"
-        f"{ai_review}"
+    report_parts = [
+        base_report,
+        sandbox_report,
+        "### AI Explanation",
+        ai_review,
+    ]
+
+    return "\n\n".join(
+        part
+        for part in report_parts
+        if part
     )
