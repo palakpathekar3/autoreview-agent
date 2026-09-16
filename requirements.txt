@@ -27,3 +27,7 @@ urllib3==2.7.0
 uvicorn==0.52.0
 openai==3.8.0
 pytest==9.1.1
+faiss-cpu
+numpy
+fastembed
+langgraph
