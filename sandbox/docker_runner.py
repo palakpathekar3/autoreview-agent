@@ -18,6 +18,8 @@ def run_python_in_docker(
             encoding="utf-8",
         )
 
+        source_file.chmod(0o644)
+
         command = [
             "docker",
             "run",
