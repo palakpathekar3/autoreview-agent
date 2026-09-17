@@ -98,29 +98,33 @@ Temporary writable filesystem for /tmp
 ## Tech Stack
 
 ### Backend
-* Python
-* FastAPI
-* Pydantic
-* PyGithub
+
+Python
+FastAPI
+Pydantic
+PyGithub
 
 ### Code Analysis
-* Python AST
-* Tree-sitter
-* Tree-sitter Python
+
+Python AST
+Tree-sitter
+Tree-sitter Python
 
 ### AI / Agent
-* LangGraph
-* Ollama
-* Qwen2.5-Coder
-* FastEmbed
-* FAISS
 
+LangGraph
+Ollama
+Qwen2.5-Coder
+FastEmbed
+FAISS
 ### Testing
-* pytest
-* Docker
+
+pytest
+Docker
 
 ### CI/CD
-* GitHub Actions
+
+GitHub Actions
 
 ## Project Structure
 
@@ -151,7 +155,8 @@ autoreview-agent/
 ├── tests/
 ├── requirements.txt
 └── README.md
-Local Setup
+
+## Local Setup
 
 Clone the repository and enter the project directory:
 
