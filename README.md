@@ -21,27 +21,27 @@ AI-powered GitHub Pull Request Review Agent that automatically analyzes changed 
 
 ## Architecture
 
-```text
-GitHub Pull Request
-        |
-        v
-GitHub Webhook
-        |
-        v
-HMAC-SHA256 Verification
-        |
-        v
-PR Event Processing
-        |
-        v
-Fetch PR Diff
-        |
-        v
-Changed Python Lines
-        |
-        v
-Deterministic Code Rules
-        |
+
+         GitHub Pull Request
+                  |
+                  v
+           GitHub Webhook
+                  |
+                  v
+       HMAC-SHA256 Verification
+                  |
+                  v
+         PR Event Processing
+                  |
+                  v
+            Fetch PR Diff
+                  |
+                  v
+         Changed Python Lines
+                  |
+                  v
+       Deterministic Code Rules
+                  |
         +-------------------+
         |                   |
         v                   v
