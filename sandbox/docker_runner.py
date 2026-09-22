@@ -1,6 +1,10 @@
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
+
+
+DOCKER_IMAGE = "python:3.12-slim"
 
 
 def run_python_in_docker(
@@ -8,6 +12,8 @@ def run_python_in_docker(
     timeout: int = 10,
 ) -> dict:
     """Run Python source code inside an isolated Docker container."""
+
+    container_name = f"autoreview-sandbox-{uuid.uuid4().hex[:12]}"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -18,9 +24,11 @@ def run_python_in_docker(
             encoding="utf-8",
         )
 
-        command = [
+        docker_args = [
             "docker",
             "run",
+            "--name",
+            container_name,
             "--rm",
             "--network",
             "none",
@@ -41,27 +49,56 @@ def run_python_in_docker(
             "65534:65534",
             "-v",
             f"{source_file}:/app/main.py:ro",
-            "python:3.12-slim",
+            DOCKER_IMAGE,
             "python",
             "/app/main.py",
         ]
 
+        process = None
+
         try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
+            process = subprocess.Popen(
+                docker_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
+            )
+
+            stdout, stderr = process.communicate(
                 timeout=timeout,
             )
 
             return {
-                "success": result.returncode == 0,
-                "return_code": result.returncode,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
+                "success": process.returncode == 0,
+                "return_code": process.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
             }
 
         except subprocess.TimeoutExpired:
+            if process is not None:
+                process.kill()
+
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+
+            # The docker CLI may be killed while the container
+            # itself is still running. Force-remove that container.
+            subprocess.run(
+                [
+                    "docker",
+                    "rm",
+                    "-f",
+                    container_name,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+
             return {
                 "success": False,
                 "return_code": None,
@@ -73,6 +110,27 @@ def run_python_in_docker(
             }
 
         except Exception as exc:
+            if process is not None:
+                process.kill()
+
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+
+            subprocess.run(
+                [
+                    "docker",
+                    "rm",
+                    "-f",
+                    container_name,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+
             return {
                 "success": False,
                 "return_code": None,

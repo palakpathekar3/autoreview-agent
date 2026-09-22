@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from agent.review_graph import review_code_with_langgraph
 from eval.rules import run_python_rules
 from parser.patch_parser import extract_added_lines
@@ -7,67 +9,36 @@ from sandbox.docker_runner import run_python_in_docker
 def review_python_file(
     source_code,
     patch,
-    filename=None,
+    filename,
 ):
-    """Run deterministic rules only on changed Python lines."""
+    """Review one changed Python file."""
 
-    if filename and (
-        filename.startswith("tests/")
-        or filename.startswith("test_")
-        or "/tests/" in filename
-        or filename.endswith("_test.py")
-    ):
+    if not patch:
         return []
 
     added_lines = extract_added_lines(patch)
+
     added_line_numbers = {
         item["line"]
         for item in added_lines
     }
 
-    findings = run_python_rules(source_code)
+    findings = run_python_rules(
+        source_code
+    )
 
     filtered_findings = []
 
     for finding in findings:
         finding_line = finding.get("line")
 
-        # Finding is directly on a changed line.
         if finding_line in added_line_numbers:
-            filtered_findings.append(finding)
-            continue
-
-        # A changed divisor assignment can cause a later
-        # division-by-zero finding.
-        if finding.get("rule") == "division-by-zero":
-            for added_line in added_lines:
-                added_line_number = added_line["line"]
-                added_content = added_line["content"].strip()
-
-                if added_line_number >= finding_line:
-                    continue
-
-                if finding_line - added_line_number > 2:
-                    continue
-
-                if "=" not in added_content:
-                    continue
-
-                left_side, right_side = added_content.split(
-                    "=",
-                    1,
-                )
-
-                variable_name = left_side.strip()
-
-                if not variable_name.isidentifier():
-                    continue
-
-                right_side = right_side.strip()
-
-                if right_side in {"0", "0.0"}:
-                    filtered_findings.append(finding)
-                    break
+            filtered_findings.append(
+                {
+                    **finding,
+                    "file_name": filename,
+                }
+            )
 
     return filtered_findings
 
@@ -75,27 +46,43 @@ def review_python_file(
 def collect_python_file_findings(
     source_code,
     patch,
-    filename=None,
+    filename,
 ):
-    """Collect findings for one changed Python file."""
+    """Collect deterministic findings for one Python file."""
 
-    findings = review_python_file(
+    if not filename.endswith(".py"):
+        return []
+
+    return review_python_file(
         source_code,
         patch,
         filename,
     )
 
-    return [
-        {
-            **finding,
-            "file_name": filename or "unknown.py",
-        }
-        for finding in findings
-    ]
+
+def is_standalone_sandbox_target(filename):
+    """Return True only for root-level Python scripts.
+
+    Project modules are not executed as standalone files because
+    they may depend on the rest of the repository.
+    """
+
+    path = Path(filename)
+
+    return (
+        path.suffix == ".py"
+        and len(path.parts) == 1
+    )
 
 
-def run_sandbox(source_code):
-    """Execute Python source code inside Docker sandbox."""
+def run_sandbox(
+    source_code,
+    filename,
+):
+    """Run a standalone Python file inside Docker."""
+
+    if not is_standalone_sandbox_target(filename):
+        return None
 
     return run_python_in_docker(
         source_code,
@@ -106,53 +93,23 @@ def run_sandbox(source_code):
 def build_sandbox_report(
     source_code_by_file,
 ):
-    """Run changed Python files in Docker and summarize execution."""
+    """Run eligible standalone Python files in Docker."""
 
-    results = []
-
-    for filename, source_code in source_code_by_file.items():
-
-        if not filename.endswith(".py"):
-            continue
-
-        result = run_sandbox(
-            source_code
+    return {
+        filename: run_sandbox(
+            source_code,
+            filename,
         )
-
-        if result["success"]:
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "passed",
-                    "message": "Sandbox execution completed successfully.",
-                }
-            )
-        elif result["return_code"] is None:
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "timeout",
-                    "message": result["stderr"],
-                }
-            )
-        else:
-            error_message = result["stderr"].strip()
-
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "failed",
-                    "message": error_message,
-                }
-            )
-
-    return results
+        for filename, source_code
+        in source_code_by_file.items()
+        if is_standalone_sandbox_target(filename)
+    }
 
 
 def format_sandbox_report(
     sandbox_results,
 ):
-    """Convert sandbox results into Markdown."""
+    """Format Docker sandbox results as Markdown."""
 
     if not sandbox_results:
         return ""
@@ -162,19 +119,25 @@ def format_sandbox_report(
         "",
     ]
 
-    for result in sandbox_results:
-        filename = result["file_name"]
-        status = result["status"].upper()
-        message = result["message"]
+    for filename, result in sandbox_results.items():
+        if result.get("success"):
+            lines.append(
+                f"- **PASSED** — `{filename}` — "
+                "Sandbox execution completed successfully."
+            )
+            continue
 
         lines.append(
-            f"- **{status}** — `{filename}` — {message}"
+            f"- **FAILED** — `{filename}` — "
+            f"{result.get('stderr', 'Sandbox execution failed.')}"
         )
 
     return "\n".join(lines)
 
 
-def build_pr_review(findings):
+def build_pr_review(
+    findings,
+):
     """Build one Markdown report for the complete PR."""
 
     if not findings:
@@ -232,21 +195,16 @@ def generate_pr_ai_review(
     source_code_by_file,
     findings,
 ):
-    """Generate one AI explanation for the complete PR."""
+    """Generate AI explanations for deterministic findings."""
 
     if not findings:
         return ""
 
-    combined_code_parts = []
-
-    for filename, source_code in source_code_by_file.items():
-        combined_code_parts.append(
-            f"FILE: {filename}\n"
-            f"{source_code}"
-        )
-
     combined_source = "\n\n".join(
-        combined_code_parts
+        f"FILE: {filename}\n"
+        f"{source_code}"
+        for filename, source_code
+        in source_code_by_file.items()
     )
 
     result = review_code_with_langgraph(
@@ -270,6 +228,7 @@ def review_pull_request(
     all_findings = []
 
     for filename, source_code in source_code_by_file.items():
+
         patch = patches_by_file.get(
             filename,
             "",
@@ -284,7 +243,9 @@ def review_pull_request(
             filename,
         )
 
-        all_findings.extend(findings)
+        all_findings.extend(
+            findings
+        )
 
     base_report = build_pr_review(
         all_findings
@@ -298,29 +259,32 @@ def review_pull_request(
         sandbox_results
     )
 
-    if not all_findings:
+    if all_findings:
+        ai_review = generate_pr_ai_review(
+            source_code_by_file,
+            all_findings,
+        )
+
+        parts = [
+            base_report,
+        ]
+
         if sandbox_report:
-            return (
-                f"{base_report}\n\n"
-                f"{sandbox_report}"
+            parts.append(
+                sandbox_report
             )
 
-        return base_report
+        if ai_review:
+            parts.append(
+                "### AI Explanation\n\n"
+                f"{ai_review}"
+            )
 
-    ai_review = generate_pr_ai_review(
-        source_code_by_file,
-        all_findings,
-    )
+        return "\n\n".join(parts)
 
-    report_parts = [
-        base_report,
-        sandbox_report,
-        "### AI Explanation",
-        ai_review,
-    ]
-
-    return "\n\n".join(
-        part
-        for part in report_parts
-        if part
+    return (
+        f"{base_report}\n\n"
+        f"{sandbox_report}"
+        if sandbox_report
+        else base_report
     )
