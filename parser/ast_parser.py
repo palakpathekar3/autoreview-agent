@@ -1,30 +1,63 @@
 #!/usr/bin/env python3
 
-import json
-
 from tree_sitter import Language, Parser
 import tree_sitter_python
 
 
 PY_LANGUAGE = Language(tree_sitter_python.language())
 
-parser = Parser()
-parser.language = PY_LANGUAGE
+
+def parse_python_source(source_code: bytes):
+    """Parse Python source code into a Tree-sitter syntax tree."""
+
+    parser = Parser()
+    parser.language = PY_LANGUAGE
+
+    return parser.parse(source_code)
 
 
-with open("samples/example.py", "rb") as f:
-    source = f.read()
+def find_function_names(tree):
+    """Return function names found in a parsed Python syntax tree."""
 
-tree = parser.parse(source)
+    function_names = []
+
+    def walk(node):
+        if node.type == "function_definition":
+            name_node = node.child_by_field_name("name")
+
+            if name_node is not None:
+                function_names.append(
+                    name_node.text.decode("utf-8")
+                )
+
+        for child in node.children:
+            walk(child)
+
+    walk(tree.root_node)
+
+    return function_names
 
 
-def walk(node):
-    if node.type == "function_definition":
-        name_node = node.child_by_field_name("name")
-        print("Function:", source[name_node.start_byte:name_node.end_byte].decode())
+def extract_function_names(source_code: bytes):
+    """Parse Python source and return all function names."""
 
-    for child in node.children:
-        walk(child)
+    tree = parse_python_source(source_code)
+
+    return find_function_names(tree)
 
 
-walk(tree.root_node)
+def main():
+    with open(
+        "samples/example.py",
+        "rb",
+    ) as source_file:
+        source = source_file.read()
+
+    function_names = extract_function_names(source)
+
+    for name in function_names:
+        print("Function:", name)
+
+
+if __name__ == "__main__":
+    main()
