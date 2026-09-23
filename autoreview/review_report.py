@@ -59,7 +59,9 @@ def _get_severity(rule: str) -> str:
     severity_map = {
         "division-by-zero": "ERROR",
         "syntax-error": "ERROR",
+        "hardcoded-secret": "ERROR",
         "print-statement": "INFO",
+        "bare-except": "WARNING",
     }
 
     return severity_map.get(

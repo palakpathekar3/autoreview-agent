@@ -5,9 +5,9 @@ from parser.change_analyzer import (
 from parser.patch_parser import AddedLine
 
 
-def test_detect_print_on_changed_line():
+def test_detect_print_statement():
     source = b"""
-def review():
+def hello():
     print("hello")
 """
 
@@ -18,12 +18,12 @@ def review():
         )
     ]
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == [
+    assert issues == [
         ChangedLineIssue(
             line_number=3,
             rule="print-statement",
@@ -32,78 +32,41 @@ def review():
     ]
 
 
-def test_ignore_print_on_unchanged_line():
+def test_ignore_print_statement_on_unchanged_line():
     source = b"""
-def review():
+def hello():
     print("hello")
-    return True
 """
 
-    added_lines = [
-        AddedLine(
-            line_number=4,
-            content="    return True",
-        )
-    ]
+    added_lines = []
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == []
-
-
-def test_detect_division_by_zero_constant():
-    source = b"""
-def calculate(x):
-    y = 0
-    return x / y
-"""
-
-    added_lines = [
-        AddedLine(
-            line_number=4,
-            content="    return x / y",
-        )
-    ]
-
-    result = analyze_changed_lines(
-        source,
-        added_lines,
-    )
-
-    assert result == [
-        ChangedLineIssue(
-            line_number=4,
-            rule="division-by-zero",
-            message=(
-                "Division by zero will raise "
-                "ZeroDivisionError."
-            ),
-        )
-    ]
+    assert issues == []
 
 
 def test_detect_literal_division_by_zero():
     source = b"""
-def calculate(x):
-    return x / 0
+def divide():
+    return 10 / 0
 """
 
     added_lines = [
         AddedLine(
             line_number=3,
-            content="    return x / 0",
+            content="    return 10 / 0",
         )
     ]
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == [
+    assert issues == [
         ChangedLineIssue(
             line_number=3,
             rule="division-by-zero",
@@ -115,29 +78,61 @@ def calculate(x):
     ]
 
 
-def test_non_zero_division_is_not_reported():
+def test_detect_division_by_zero_through_constant():
     source = b"""
-def calculate(x):
-    y = 2
-    return x / y
+ZERO = 0
+
+
+def divide():
+    return 10 / ZERO
 """
 
     added_lines = [
         AddedLine(
-            line_number=4,
-            content="    return x / y",
+            line_number=6,
+            content="    return 10 / ZERO",
         )
     ]
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == []
+    assert issues == [
+        ChangedLineIssue(
+            line_number=6,
+            rule="division-by-zero",
+            message=(
+                "Division by zero will raise "
+                "ZeroDivisionError."
+            ),
+        )
+    ]
 
 
-def test_syntax_error_on_changed_lines():
+def test_ignore_safe_division():
+    source = b"""
+def divide(value):
+    return 10 / value
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=3,
+            content="    return 10 / value",
+        )
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == []
+
+
+def test_detect_syntax_error():
     source = b"""
 def broken(
     return 10
@@ -154,12 +149,12 @@ def broken(
         ),
     ]
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == [
+    assert issues == [
         ChangedLineIssue(
             line_number=2,
             rule="syntax-error",
@@ -179,56 +174,173 @@ def broken(
     ]
 
 
-def test_empty_changes_return_no_issues():
+def test_detect_floor_division_by_zero():
     source = b"""
-def hello():
-    print("hello")
-"""
-
-    result = analyze_changed_lines(
-        source,
-        [],
-    )
-
-    assert result == []
-
-
-def test_multiple_changed_issues():
-    source = b"""
-def review():
-    print("hello")
-    y = 0
-    return 10 / y
+def divide():
+    return 10 // 0
 """
 
     added_lines = [
         AddedLine(
             line_number=3,
-            content='    print("hello")',
-        ),
-        AddedLine(
-            line_number=5,
-            content="    return 10 / y",
-        ),
+            content="    return 10 // 0",
+        )
     ]
 
-    result = analyze_changed_lines(
+    issues = analyze_changed_lines(
         source,
         added_lines,
     )
 
-    assert result == [
+    assert issues == [
         ChangedLineIssue(
             line_number=3,
-            rule="print-statement",
-            message="Consider using logging instead of print().",
-        ),
-        ChangedLineIssue(
-            line_number=5,
             rule="division-by-zero",
             message=(
                 "Division by zero will raise "
                 "ZeroDivisionError."
             ),
+        )
+    ]
+
+
+def test_detect_modulo_by_zero():
+    source = b"""
+def remainder():
+    return 10 % 0
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=3,
+            content="    return 10 % 0",
+        )
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == [
+        ChangedLineIssue(
+            line_number=3,
+            rule="division-by-zero",
+            message=(
+                "Division by zero will raise "
+                "ZeroDivisionError."
+            ),
+        )
+    ]
+
+
+def test_detect_hardcoded_secret():
+    source = b"""
+API_KEY = "sk-test-123456"
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content='API_KEY = "sk-test-123456"',
+        )
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == [
+        ChangedLineIssue(
+            line_number=2,
+            rule="hardcoded-secret",
+            message=(
+                "Possible hardcoded secret detected. "
+                "Move secrets to environment variables "
+                "or a secret manager."
+            ),
+        )
+    ]
+
+
+def test_ignore_non_secret_string_assignment():
+    source = b"""
+API_URL = "https://example.com"
+NAME = "Palak"
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content='API_URL = "https://example.com"',
+        ),
+        AddedLine(
+            line_number=3,
+            content='NAME = "Palak"',
         ),
     ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == []
+
+
+def test_detect_bare_except():
+    source = b"""
+def risky():
+    try:
+        do_something()
+    except:
+        pass
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=5,
+            content="    except:",
+        )
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == [
+        ChangedLineIssue(
+            line_number=5,
+            rule="bare-except",
+            message=(
+                "Avoid bare except; catch a specific "
+                "exception type."
+            ),
+        )
+    ]
+
+
+def test_ignore_specific_except():
+    source = b"""
+def risky():
+    try:
+        do_something()
+    except ValueError:
+        pass
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=5,
+            content="    except ValueError:",
+        )
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == []

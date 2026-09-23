@@ -80,6 +80,20 @@ def analyze_changed_lines(
                 issues,
             )
 
+        if isinstance(node, ast.Assign):
+            _check_hardcoded_secret(
+                node,
+                line_number,
+                issues,
+            )
+
+        if isinstance(node, ast.ExceptHandler):
+            _check_bare_except(
+                node,
+                line_number,
+                issues,
+            )
+
     return _remove_duplicate_issues(issues)
 
 
@@ -197,6 +211,95 @@ def _is_known_zero(
         return constants.get(node.id) == 0
 
     return False
+
+
+def _check_hardcoded_secret(
+    node: ast.Assign,
+    line_number: int,
+    issues: list[ChangedLineIssue],
+) -> None:
+    """Detect obvious hardcoded secrets in assignments."""
+
+    if len(node.targets) != 1:
+        return
+
+    target = node.targets[0]
+
+    if not isinstance(
+        target,
+        ast.Name,
+    ):
+        return
+
+    variable_name = target.id.upper()
+
+    secret_keywords = (
+        "API_KEY",
+        "API_TOKEN",
+        "ACCESS_TOKEN",
+        "AUTH_TOKEN",
+        "SECRET_KEY",
+        "PASSWORD",
+        "PASSWD",
+        "PRIVATE_KEY",
+    )
+
+    if not any(
+        keyword in variable_name
+        for keyword in secret_keywords
+    ):
+        return
+
+    value = node.value
+
+    if not isinstance(
+        value,
+        ast.Constant,
+    ):
+        return
+
+    if not isinstance(
+        value.value,
+        str,
+    ):
+        return
+
+    if not value.value.strip():
+        return
+
+    issues.append(
+        ChangedLineIssue(
+            line_number=line_number,
+            rule="hardcoded-secret",
+            message=(
+                "Possible hardcoded secret detected. "
+                "Move secrets to environment variables "
+                "or a secret manager."
+            ),
+        )
+    )
+
+
+def _check_bare_except(
+    node: ast.ExceptHandler,
+    line_number: int,
+    issues: list[ChangedLineIssue],
+) -> None:
+    """Detect bare except clauses."""
+
+    if node.type is not None:
+        return
+
+    issues.append(
+        ChangedLineIssue(
+            line_number=line_number,
+            rule="bare-except",
+            message=(
+                "Avoid bare except; catch a specific "
+                "exception type."
+            ),
+        )
+    )
 
 
 def _syntax_error_for_changed_lines(
