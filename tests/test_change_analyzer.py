@@ -376,3 +376,72 @@ def second():
         issue.line_number
         for issue in issues
     ] == [4, 7]
+
+def test_detects_eval_on_added_line():
+    source = b"""
+result = eval(user_input)
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content="result = eval(user_input)",
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].line_number == 2
+    assert (
+        issues[0].rule
+        == "dangerous-code-execution"
+    )
+
+
+def test_detects_exec_on_added_line():
+    source = b"""
+exec(user_input)
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content="exec(user_input)",
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].line_number == 2
+    assert (
+        issues[0].rule
+        == "dangerous-code-execution"
+    )
+
+
+def test_does_not_flag_normal_function_call():
+    source = b"""
+result = calculate(value)
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content="result = calculate(value)",
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == []

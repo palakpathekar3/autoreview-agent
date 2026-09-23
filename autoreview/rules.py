@@ -49,11 +49,19 @@ RULES: dict[str, RuleDefinition] = {
             "exception type."
         ),
     ),
+    "dangerous-code-execution": RuleDefinition(
+        name="dangerous-code-execution",
+        severity="ERROR",
+        message=(
+            "Avoid eval() or exec() on untrusted "
+            "input because they can execute arbitrary code."
+        ),
+    ),
 }
 
 
 def get_rule(rule_name: str) -> RuleDefinition:
-    """Return metadata for a rule.
+    """Return metadata for an AutoReview rule.
 
     Unknown rules receive a safe WARNING severity so
     reporting does not fail for newly added or custom rules.

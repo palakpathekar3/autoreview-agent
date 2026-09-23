@@ -73,6 +73,12 @@ def analyze_changed_lines(
                 issues,
             )
 
+            _check_dangerous_code_execution(
+                node,
+                line_number,
+                issues,
+            )
+
         if isinstance(node, ast.BinOp):
             _check_division_by_zero(
                 node,
@@ -164,6 +170,36 @@ def _check_print_statement(
         )
     )
 
+def _check_dangerous_code_execution(
+    node: ast.Call,
+    line_number: int,
+    issues: list[ChangedLineIssue],
+) -> None:
+    """Detect eval() and exec() calls."""
+
+    if not isinstance(
+        node.func,
+        ast.Name,
+    ):
+        return
+
+    if node.func.id not in {
+        "eval",
+        "exec",
+    }:
+        return
+
+    rule = get_rule(
+        "dangerous-code-execution"
+    )
+
+    issues.append(
+        ChangedLineIssue(
+            line_number=line_number,
+            rule=rule.name,
+            message=rule.message,
+        )
+    )
 
 def _check_division_by_zero(
     node: ast.BinOp,
