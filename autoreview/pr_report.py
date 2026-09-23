@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from autoreview.rules import get_rule
 from autoreview.review_report import ReviewReport
 
 
@@ -30,14 +31,8 @@ class PullRequestReport:
         lines = [
             "## AutoReview",
             "",
-            (
-                f"Reviewed **{self.file_count} "
-                f"Python file(s)**."
-            ),
-            (
-                f"Found **{self.issue_count} "
-                f"issue(s)**."
-            ),
+            f"Reviewed **{self.file_count} Python file(s)**.",
+            f"Found **{self.issue_count} issue(s)**.",
         ]
 
         for report in self.reports:
@@ -50,15 +45,11 @@ class PullRequestReport:
             )
 
             if not report.issues:
-                lines.append(
-                    "No issues found."
-                )
+                lines.append("No issues found.")
                 continue
 
             for issue in report.issues:
-                severity = _get_severity(
-                    issue.rule
-                )
+                severity = get_rule(issue.rule).severity
 
                 lines.append(
                     (
@@ -70,18 +61,3 @@ class PullRequestReport:
                 )
 
         return "\n".join(lines)
-
-
-def _get_severity(rule: str) -> str:
-    """Return a display severity for a review rule."""
-
-    severity_map = {
-        "division-by-zero": "ERROR",
-        "syntax-error": "ERROR",
-        "print-statement": "INFO",
-    }
-
-    return severity_map.get(
-        rule,
-        "WARNING",
-    )

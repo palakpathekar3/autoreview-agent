@@ -344,3 +344,35 @@ def risky():
     )
 
     assert issues == []
+
+
+def test_sort_issues_by_line_number():
+    source = b"""
+def first():
+    if True:
+        print("later")
+
+def second():
+    print("earlier")
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=4,
+            content='        print("later")',
+        ),
+        AddedLine(
+            line_number=7,
+            content='    print("earlier")',
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert [
+        issue.line_number
+        for issue in issues
+    ] == [4, 7]

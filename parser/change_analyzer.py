@@ -3,6 +3,7 @@
 import ast
 from dataclasses import dataclass
 
+from autoreview.rules import get_rule
 from parser.ast_parser import parse_python_source
 from parser.patch_parser import AddedLine
 
@@ -94,7 +95,14 @@ def analyze_changed_lines(
                 issues,
             )
 
-    return _remove_duplicate_issues(issues)
+    unique_issues = _remove_duplicate_issues(
+        issues
+    )
+
+    return sorted(
+        unique_issues,
+        key=lambda issue: issue.line_number,
+    )
 
 
 def _collect_integer_constants(
@@ -146,14 +154,13 @@ def _check_print_statement(
     if node.func.id != "print":
         return
 
+    rule = get_rule("print-statement")
+
     issues.append(
         ChangedLineIssue(
             line_number=line_number,
-            rule="print-statement",
-            message=(
-                "Consider using logging "
-                "instead of print()."
-            ),
+            rule=rule.name,
+            message=rule.message,
         )
     )
 
@@ -180,14 +187,13 @@ def _check_division_by_zero(
         node.right,
         constants,
     ):
+        rule = get_rule("division-by-zero")
+
         issues.append(
             ChangedLineIssue(
                 line_number=line_number,
-                rule="division-by-zero",
-                message=(
-                    "Division by zero will raise "
-                    "ZeroDivisionError."
-                ),
+                rule=rule.name,
+                message=rule.message,
             )
         )
 
@@ -267,15 +273,13 @@ def _check_hardcoded_secret(
     if not value.value.strip():
         return
 
+    rule = get_rule("hardcoded-secret")
+
     issues.append(
         ChangedLineIssue(
             line_number=line_number,
-            rule="hardcoded-secret",
-            message=(
-                "Possible hardcoded secret detected. "
-                "Move secrets to environment variables "
-                "or a secret manager."
-            ),
+            rule=rule.name,
+            message=rule.message,
         )
     )
 
@@ -290,14 +294,13 @@ def _check_bare_except(
     if node.type is not None:
         return
 
+    rule = get_rule("bare-except")
+
     issues.append(
         ChangedLineIssue(
             line_number=line_number,
-            rule="bare-except",
-            message=(
-                "Avoid bare except; catch a specific "
-                "exception type."
-            ),
+            rule=rule.name,
+            message=rule.message,
         )
     )
 
@@ -307,14 +310,13 @@ def _syntax_error_for_changed_lines(
 ) -> list[ChangedLineIssue]:
     """Return syntax-error findings for changed lines."""
 
+    rule = get_rule("syntax-error")
+
     return [
         ChangedLineIssue(
             line_number=item.line_number,
-            rule="syntax-error",
-            message=(
-                "Changed code contains a Python "
-                "syntax error."
-            ),
+            rule=rule.name,
+            message=rule.message,
         )
         for item in added_lines
     ]

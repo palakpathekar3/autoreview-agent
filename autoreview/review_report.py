@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from autoreview.rules import get_rule
 from parser.change_analyzer import ChangedLineIssue
 
 
@@ -36,7 +37,7 @@ class ReviewReport:
         ]
 
         for issue in self.issues:
-            severity = _get_severity(issue.rule)
+            severity = get_rule(issue.rule).severity
 
             lines.extend(
                 [
@@ -51,20 +52,3 @@ class ReviewReport:
             )
 
         return "\n".join(lines)
-
-
-def _get_severity(rule: str) -> str:
-    """Return a display severity for a review rule."""
-
-    severity_map = {
-        "division-by-zero": "ERROR",
-        "syntax-error": "ERROR",
-        "hardcoded-secret": "ERROR",
-        "print-statement": "INFO",
-        "bare-except": "WARNING",
-    }
-
-    return severity_map.get(
-        rule,
-        "WARNING",
-    )
