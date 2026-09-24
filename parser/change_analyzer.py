@@ -101,6 +101,13 @@ def analyze_changed_lines(
                 issues,
             )
 
+        if isinstance(node, ast.FunctionDef):
+            _check_mutable_default_argument(
+                node,
+                line_number,
+                issues,
+            )
+
     unique_issues = _remove_duplicate_issues(
         issues
     )
@@ -379,3 +386,37 @@ def _remove_duplicate_issues(
         unique_issues.append(issue)
 
     return unique_issues
+
+def _check_mutable_default_argument(
+    node: ast.FunctionDef,
+    line_number: int,
+    issues: list[ChangedLineIssue],
+) -> None:
+    """Detect mutable list, dict, and set defaults."""
+
+    mutable_types = (
+        ast.List,
+        ast.Dict,
+        ast.Set,
+    )
+
+    for default in node.args.defaults:
+        if not isinstance(
+            default,
+            mutable_types,
+        ):
+            continue
+
+        rule = get_rule(
+            "mutable-default-argument"
+        )
+
+        issues.append(
+            ChangedLineIssue(
+                line_number=line_number,
+                rule=rule.name,
+                message=rule.message,
+            )
+        )
+
+        return

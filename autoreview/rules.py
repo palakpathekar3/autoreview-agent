@@ -57,6 +57,14 @@ RULES: dict[str, RuleDefinition] = {
             "input because they can execute arbitrary code."
         ),
     ),
+        "mutable-default-argument": RuleDefinition(
+        name="mutable-default-argument",
+        severity="WARNING",
+        message=(
+            "Avoid mutable default arguments such as "
+            "list, dict, or set; use None instead."
+        ),
+    ),
 }
 
 

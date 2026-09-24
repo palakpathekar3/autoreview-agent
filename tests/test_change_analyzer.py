@@ -445,3 +445,76 @@ result = calculate(value)
     )
 
     assert issues == []
+
+def test_detects_mutable_list_default_argument():
+    source = b"""
+def add_item(item, items=[]):
+    items.append(item)
+    return items
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content="def add_item(item, items=[]):",
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].line_number == 2
+    assert (
+        issues[0].rule
+        == "mutable-default-argument"
+    )
+
+
+def test_detects_mutable_dict_default_argument():
+    source = b"""
+def configure(options={}):
+    return options
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content="def configure(options={}):",
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert len(issues) == 1
+    assert issues[0].line_number == 2
+    assert (
+        issues[0].rule
+        == "mutable-default-argument"
+    )
+
+
+def test_allows_immutable_default_argument():
+    source = b"""
+def greet(name="Palak"):
+    return name
+"""
+
+    added_lines = [
+        AddedLine(
+            line_number=2,
+            content='def greet(name="Palak"):',
+        ),
+    ]
+
+    issues = analyze_changed_lines(
+        source,
+        added_lines,
+    )
+
+    assert issues == []
