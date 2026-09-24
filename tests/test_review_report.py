@@ -74,3 +74,29 @@ def test_unknown_rule_gets_warning():
     )
 
     assert "**WARNING**" in report.format()
+
+def test_mutable_default_argument_gets_warning():
+    issues = [
+        ChangedLineIssue(
+            line_number=2,
+            rule="mutable-default-argument",
+            message=(
+                "Avoid mutable default arguments such as "
+                "list, dict, or set; use None instead."
+            ),
+        ),
+    ]
+
+    report = ReviewReport(
+        file_name="example.py",
+        issues=issues,
+    )
+
+    output = report.format()
+
+    assert (
+        "- **WARNING** — `mutable-default-argument` — "
+        "`example.py` Line 2: "
+        "Avoid mutable default arguments such as "
+        "list, dict, or set; use None instead."
+    ) in output

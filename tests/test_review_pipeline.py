@@ -118,3 +118,49 @@ def test_review_pull_request():
     assert report.reports[0].issues[1].rule == (
         "division-by-zero"
     )
+
+def test_review_pull_request_file_detects_mutable_default_argument():
+    files = [
+        {
+            "filename": "demo_review.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": """@@ -1,2 +1,3 @@
+ def review_demo():
++    def configure(options={}):
++        return options
+""",
+        }
+    ]
+
+    source = """def review_demo():
+    def configure(options={}):
+        return options
+"""
+
+    with patch(
+        "autoreview.review_pipeline.get_pull_request_files",
+        return_value=files,
+    ), patch(
+        "autoreview.review_pipeline.get_pull_request_file_content",
+        return_value=source,
+    ):
+        report = review_pull_request_file(
+            "palakpathekar3/autoreview-agent",
+            3,
+            "demo_review.py",
+        )
+
+    assert report.file_name == "demo_review.py"
+
+    assert report.issues == [
+        ChangedLineIssue(
+            line_number=2,
+            rule="mutable-default-argument",
+            message=(
+                "Avoid mutable default arguments such as "
+                "list, dict, or set; use None instead."
+            ),
+        ),
+    ]
