@@ -39,3 +39,23 @@ def test_explain_review_findings(mock_explain):
             }
         ],
     )
+
+@patch("agent.review_service.explain_findings")
+def test_explain_review_findings_returns_none_on_ai_failure(mock_explain):
+    mock_explain.side_effect = RuntimeError("Ollama unavailable")
+
+    findings = [
+        ChangedLineIssue(
+            rule="print-statement",
+            line_number=1,
+            message="Consider using logging instead of print().",
+        )
+    ]
+
+    result = explain_review_findings(
+        source_code="print('hello')",
+        file_name="example.py",
+        findings=findings,
+    )
+
+    assert result is None

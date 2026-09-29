@@ -9,8 +9,13 @@ def explain_review_findings(
     source_code: str,
     file_name: str,
     findings: list[ChangedLineIssue],
-) -> str:
-    """Generate an AI explanation for deterministic findings."""
+) -> str | None:
+    """
+    Generate an AI explanation for deterministic findings.
+
+    If the AI service is unavailable or fails, return None so the
+    deterministic review can continue normally.
+    """
 
     review_input = build_review_input(
         source_code=source_code,
@@ -18,8 +23,11 @@ def explain_review_findings(
         findings=findings,
     )
 
-    return explain_findings(
-        source_code=review_input["source_code"],
-        file_name=review_input["file_name"],
-        findings=review_input["findings"],
-    )
+    try:
+        return explain_findings(
+            source_code=review_input["source_code"],
+            file_name=review_input["file_name"],
+            findings=review_input["findings"],
+        )
+    except Exception:
+        return None
