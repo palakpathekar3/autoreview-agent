@@ -126,3 +126,37 @@ def test_format_pull_request_report_with_multiple_issue_types():
     )
 
     assert "No issues found." in output
+
+def test_format_pull_request_report_with_ai_explanation():
+    reports = [
+        ReviewReport(
+            file_name="review.py",
+            issues=[
+                ChangedLineIssue(
+                    line_number=2,
+                    rule="print-statement",
+                    message=(
+                        "Consider using logging "
+                        "instead of print()."
+                    ),
+                ),
+            ],
+            ai_explanation=(
+                "Using logging provides better control "
+                "over application output."
+            ),
+        ),
+    ]
+
+    report = PullRequestReport(
+        reports=reports,
+    )
+
+    output = report.format()
+
+    assert "#### AI Explanation" in output
+    assert (
+        "Using logging provides better control "
+        "over application output."
+        in output
+    )

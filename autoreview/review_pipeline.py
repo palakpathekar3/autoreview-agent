@@ -1,3 +1,4 @@
+from agent.review_service import explain_review_findings
 from autoreview.github_client import (
     get_pull_request_file_content,
     get_pull_request_files,
@@ -14,8 +15,8 @@ def review_pull_request_file(
     file_path: str,
 ) -> ReviewReport:
     """
-    Run deterministic AutoReview analysis for one file
-    changed in a GitHub pull request.
+    Run deterministic AutoReview analysis and AI explanation
+    for one file changed in a GitHub pull request.
     """
 
     files = get_pull_request_files(
@@ -45,9 +46,7 @@ def review_pull_request_file(
             issues=[],
         )
 
-    added_lines = extract_added_lines(
-        patch
-    )
+    added_lines = extract_added_lines(patch)
 
     source = get_pull_request_file_content(
         repository_name,
@@ -60,9 +59,19 @@ def review_pull_request_file(
         added_lines,
     )
 
+    ai_explanation = None
+
+    if issues:
+        ai_explanation = explain_review_findings(
+            source_code=source,
+            file_name=file_path,
+            findings=issues,
+        )
+
     return ReviewReport(
         file_name=file_path,
         issues=issues,
+        ai_explanation=ai_explanation,
     )
 
 
@@ -101,5 +110,5 @@ def review_pull_request(
         reports.append(report)
 
     return PullRequestReport(
-        reports=reports
+        reports=reports,
     )

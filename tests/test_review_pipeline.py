@@ -164,3 +164,87 @@ def test_review_pull_request_file_detects_mutable_default_argument():
             ),
         ),
     ]
+
+@patch("autoreview.review_pipeline.explain_review_findings")
+def test_review_pull_request_file_adds_ai_explanation(
+    mock_explain,
+):
+    files = [
+        {
+            "filename": "demo_review.py",
+            "status": "modified",
+            "additions": 2,
+            "deletions": 0,
+            "patch": """@@ -1,3 +1,5 @@
+ def review_demo():
++    print("hello")
++    return 10 / 0
+""",
+        }
+    ]
+
+    source = """def review_demo():
+    print("hello")
+    return 10 / 0
+"""
+
+    mock_explain.return_value = (
+        "Use logging instead of print(), and avoid division by zero."
+    )
+
+    with patch(
+        "autoreview.review_pipeline.get_pull_request_files",
+        return_value=files,
+    ), patch(
+        "autoreview.review_pipeline.get_pull_request_file_content",
+        return_value=source,
+    ):
+        report = review_pull_request_file(
+            "palakpathekar3/autoreview-agent",
+            3,
+            "demo_review.py",
+        )
+
+    assert report.ai_explanation == (
+        "Use logging instead of print(), and avoid division by zero."
+    )
+
+    mock_explain.assert_called_once()
+
+@patch("autoreview.review_pipeline.explain_review_findings")
+def test_review_pull_request_file_does_not_call_ai_for_clean_code(
+    mock_explain,
+):
+    files = [
+        {
+            "filename": "clean.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": """@@ -1,1 +1,2 @@
+ def hello():
++    return "hello"
+""",
+        }
+    ]
+
+    source = """def hello():
+    return "hello"
+"""
+
+    with patch(
+        "autoreview.review_pipeline.get_pull_request_files",
+        return_value=files,
+    ), patch(
+        "autoreview.review_pipeline.get_pull_request_file_content",
+        return_value=source,
+    ):
+        report = review_pull_request_file(
+            "palakpathekar3/autoreview-agent",
+            3,
+            "clean.py",
+        )
+
+    assert report.issues == []
+    assert report.ai_explanation is None
+    mock_explain.assert_not_called()

@@ -100,3 +100,29 @@ def test_mutable_default_argument_gets_warning():
         "Avoid mutable default arguments such as "
         "list, dict, or set; use None instead."
     ) in output
+
+
+def test_format_review_report_with_ai_explanation():
+    issues = [
+        ChangedLineIssue(
+            line_number=2,
+            rule="print-statement",
+            message="Consider using logging instead of print().",
+        ),
+    ]
+
+    report = ReviewReport(
+        file_name="demo.py",
+        issues=issues,
+        ai_explanation=(
+            "Using logging provides better control over application output."
+        ),
+    )
+
+    output = report.format()
+
+    assert "### AI Explanation" in output
+    assert (
+        "Using logging provides better control over application output."
+        in output
+    )

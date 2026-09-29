@@ -10,6 +10,7 @@ class ReviewReport:
 
     file_name: str
     issues: list[ChangedLineIssue]
+    ai_explanation: str | None = None
 
     @property
     def issue_count(self) -> int:
@@ -39,15 +40,23 @@ class ReviewReport:
         for issue in self.issues:
             severity = get_rule(issue.rule).severity
 
+            lines.append(
+                (
+                    f"- **{severity}** — "
+                    f"`{issue.rule}` — "
+                    f"`{self.file_name}` "
+                    f"Line {issue.line_number}: "
+                    f"{issue.message}"
+                )
+            )
+
+        if self.ai_explanation:
             lines.extend(
                 [
-                    (
-                        f"- **{severity}** — "
-                        f"`{issue.rule}` — "
-                        f"`{self.file_name}` "
-                        f"Line {issue.line_number}: "
-                        f"{issue.message}"
-                    ),
+                    "",
+                    "### AI Explanation",
+                    "",
+                    self.ai_explanation,
                 ]
             )
 

@@ -60,4 +60,14 @@ class PullRequestReport:
                     )
                 )
 
+            if report.ai_explanation:
+                lines.extend(
+                    [
+                        "",
+                        "#### AI Explanation",
+                        "",
+                        report.ai_explanation,
+                    ]
+                )
+
         return "\n".join(lines)
