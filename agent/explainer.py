@@ -1,6 +1,10 @@
 """AI explanation layer for deterministic AutoReview findings."""
 
+import json
+
 import requests
+
+from agent.explanation_validator import validate_explanations
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODEL_NAME = "qwen2.5-coder:1.5b"
@@ -10,11 +14,11 @@ def explain_findings(
     source_code: str,
     file_name: str,
     findings: list[dict],
-) -> str:
-    """Explain deterministic findings using Ollama."""
+) -> list:
+    """Explain deterministic findings using structured Ollama output."""
 
     if not findings:
-        return "NO ISSUES FOUND"
+        return []
 
     finding_text = "\n".join(
         (
@@ -35,10 +39,22 @@ Deterministic findings:
 Relevant source code:
 {source_code}
 
-Explain the deterministic findings briefly.
-Do not invent new issues.
-Explain only the findings provided above.
-Return one short explanation for each finding.
+Explain ONLY the deterministic findings provided above.
+
+Return ONLY valid JSON.
+Do not use markdown.
+Do not add extra findings.
+Do not change rule names or line numbers.
+
+Required JSON format:
+[
+  {{
+    "rule": "exact rule name from the finding",
+    "line_number": 1,
+    "explanation": "brief explanation of the finding",
+    "suggestion": "brief actionable suggestion"
+  }}
+]
 """
 
     response = requests.post(
@@ -47,6 +63,7 @@ Return one short explanation for each finding.
             "model": MODEL_NAME,
             "prompt": prompt,
             "stream": False,
+            "format": "json",
             "options": {
                 "temperature": 0,
             },
@@ -62,4 +79,27 @@ Return one short explanation for each finding.
     if not review:
         raise RuntimeError("Ollama returned an empty response.")
 
-    return review
+    try:
+        explanations = json.loads(review)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Ollama returned invalid JSON."
+        ) from exc
+
+    if isinstance(explanations, dict):
+        if len(findings) != 1:
+            raise ValueError(
+                "Ollama returned a JSON object for multiple findings."
+            )
+
+        explanations = [explanations]
+
+    if not isinstance(explanations, list):
+        raise ValueError(
+            "Ollama response must contain a JSON list or object."
+        )
+
+    return validate_explanations(
+        explanations=explanations,
+        findings=findings,
+    )

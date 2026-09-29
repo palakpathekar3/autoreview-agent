@@ -1,23 +1,34 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from agent.explainer import explain_findings
 
 
-def test_explain_findings_returns_no_issues_for_empty_findings():
+def test_explain_findings_returns_empty_list_for_empty_findings():
     result = explain_findings(
         source_code="print('hello')",
         file_name="example.py",
         findings=[],
     )
 
-    assert result == "NO ISSUES FOUND"
+    assert result == []
 
 
 @patch("agent.explainer.requests.post")
 def test_explain_findings_uses_ollama(mock_post):
     mock_response = Mock()
     mock_response.json.return_value = {
-        "response": "Use logging instead of print() for better control."
+        "response": """
+        [
+            {
+                "rule": "print-statement",
+                "line_number": 1,
+                "explanation": "print() is less suitable for production logging.",
+                "suggestion": "Use the logging module instead."
+            }
+        ]
+        """
     }
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
@@ -34,7 +45,13 @@ def test_explain_findings_uses_ollama(mock_post):
         ],
     )
 
-    assert result == "Use logging instead of print() for better control."
+    assert len(result) == 1
+    assert result[0].rule == "print-statement"
+    assert result[0].line_number == 1
+    assert result[0].explanation == (
+        "print() is less suitable for production logging."
+    )
+    assert result[0].suggestion == "Use the logging module instead."
 
     mock_post.assert_called_once()
 
@@ -46,7 +63,10 @@ def test_explain_findings_raises_for_empty_ai_response(mock_post):
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
 
-    try:
+    with pytest.raises(
+        RuntimeError,
+        match="Ollama returned an empty response",
+    ):
         explain_findings(
             source_code="print('hello')",
             file_name="example.py",
@@ -58,7 +78,29 @@ def test_explain_findings_raises_for_empty_ai_response(mock_post):
                 }
             ],
         )
-    except RuntimeError as exc:
-        assert str(exc) == "Ollama returned an empty response."
-    else:
-        raise AssertionError("Expected RuntimeError")
+
+
+@patch("agent.explainer.requests.post")
+def test_explain_findings_raises_for_invalid_json(mock_post):
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "response": "This is not JSON."
+    }
+    mock_response.raise_for_status.return_value = None
+    mock_post.return_value = mock_response
+
+    with pytest.raises(
+        ValueError,
+        match="Ollama returned invalid JSON",
+    ):
+        explain_findings(
+            source_code="print('hello')",
+            file_name="example.py",
+            findings=[
+                {
+                    "rule": "print-statement",
+                    "line_number": 1,
+                    "message": "Consider using logging instead of print().",
+                }
+            ],
+        )

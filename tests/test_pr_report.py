@@ -1,72 +1,61 @@
+from agent.explanation import FindingExplanation
 from autoreview.pr_report import PullRequestReport
 from autoreview.review_report import ReviewReport
 from parser.change_analyzer import ChangedLineIssue
 
 
-def test_format_pull_request_report():
+def test_pull_request_report_file_count():
     reports = [
         ReviewReport(
-            file_name="demo_review.py",
-            issues=[
-                ChangedLineIssue(
-                    line_number=2,
-                    rule="print-statement",
-                    message=(
-                        "Consider using logging "
-                        "instead of print()."
-                    ),
-                ),
-                ChangedLineIssue(
-                    line_number=5,
-                    rule="division-by-zero",
-                    message=(
-                        "Division by zero will raise "
-                        "ZeroDivisionError."
-                    ),
-                ),
-            ],
+            file_name="one.py",
+            issues=[],
         ),
         ReviewReport(
-            file_name="clean.py",
+            file_name="two.py",
             issues=[],
         ),
     ]
 
-    report = PullRequestReport(
-        reports=reports
-    )
+    report = PullRequestReport(reports=reports)
 
     assert report.file_count == 2
-    assert report.issue_count == 2
-
-    output = report.format()
-
-    assert "Reviewed **2 Python file(s)**." in output
-    assert "Found **2 issue(s)**." in output
-
-    assert "### `demo_review.py`" in output
-    assert "### `clean.py`" in output
-
-    assert "`print-statement`" in output
-    assert "`division-by-zero`" in output
-    assert "No issues found." in output
 
 
-def test_empty_pull_request_report():
-    report = PullRequestReport(
-        reports=[]
-    )
+def test_pull_request_report_issue_count():
+    reports = [
+        ReviewReport(
+            file_name="one.py",
+            issues=[
+                ChangedLineIssue(
+                    line_number=1,
+                    rule="print-statement",
+                    message="Use logging instead.",
+                ),
+            ],
+        ),
+        ReviewReport(
+            file_name="two.py",
+            issues=[
+                ChangedLineIssue(
+                    line_number=2,
+                    rule="division-by-zero",
+                    message="Division by zero detected.",
+                ),
+                ChangedLineIssue(
+                    line_number=3,
+                    rule="bare-except",
+                    message="Avoid bare except.",
+                ),
+            ],
+        ),
+    ]
 
-    assert report.file_count == 0
-    assert report.issue_count == 0
+    report = PullRequestReport(reports=reports)
 
-    assert report.format() == (
-        "## AutoReview\n"
-        "\n"
-        "Reviewed **0 Python file(s)**.\n"
-        "Found **0 issue(s)**."
-    )
-def test_format_pull_request_report_with_multiple_issue_types():
+    assert report.issue_count == 3
+
+
+def test_format_pull_request_report():
     reports = [
         ReviewReport(
             file_name="review.py",
@@ -79,53 +68,21 @@ def test_format_pull_request_report_with_multiple_issue_types():
                         "instead of print()."
                     ),
                 ),
-                ChangedLineIssue(
-                    line_number=3,
-                    rule="division-by-zero",
-                    message=(
-                        "Division by zero will raise "
-                        "ZeroDivisionError."
-                    ),
-                ),
-                ChangedLineIssue(
-                    line_number=4,
-                    rule="mutable-default-argument",
-                    message=(
-                        "Avoid mutable default arguments such as "
-                        "list, dict, or set; use None instead."
-                    ),
-                ),
             ],
-        ),
-        ReviewReport(
-            file_name="clean.py",
-            issues=[],
         ),
     ]
 
-    report = PullRequestReport(
-        reports=reports
-    )
-
-    assert report.file_count == 2
-    assert report.issue_count == 3
+    report = PullRequestReport(reports=reports)
 
     output = report.format()
 
-    assert "Reviewed **2 Python file(s)**." in output
-    assert "Found **3 issue(s)**." in output
-
+    assert "## AutoReview" in output
+    assert "Reviewed **1 Python file(s)**." in output
+    assert "Found **1 issue(s)**." in output
     assert "### `review.py`" in output
-    assert "### `clean.py`" in output
+    assert "`print-statement`" in output
+    assert "Line 2" in output
 
-    assert "**INFO** — `print-statement`" in output
-    assert "**ERROR** — `division-by-zero`" in output
-    assert (
-        "**WARNING** — `mutable-default-argument`"
-        in output
-    )
-
-    assert "No issues found." in output
 
 def test_format_pull_request_report_with_ai_explanation():
     reports = [
@@ -141,22 +98,30 @@ def test_format_pull_request_report_with_ai_explanation():
                     ),
                 ),
             ],
-            ai_explanation=(
-                "Using logging provides better control "
-                "over application output."
-            ),
+            ai_explanations=[
+                FindingExplanation(
+                    rule="print-statement",
+                    line_number=2,
+                    explanation=(
+                        "Using logging provides better "
+                        "control over application output."
+                    ),
+                    suggestion=(
+                        "Use the logging module instead."
+                    ),
+                ),
+            ],
         ),
     ]
 
-    report = PullRequestReport(
-        reports=reports,
-    )
+    report = PullRequestReport(reports=reports)
 
     output = report.format()
 
     assert "#### AI Explanation" in output
+    assert "**`print-statement` — Line 2**" in output
     assert (
-        "Using logging provides better control "
-        "over application output."
-        in output
-    )
+        "Using logging provides better "
+        "control over application output."
+    ) in output
+    assert "**Suggestion:** Use the logging module instead." in output

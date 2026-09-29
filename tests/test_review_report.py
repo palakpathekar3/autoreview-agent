@@ -1,3 +1,4 @@
+from agent.explanation import FindingExplanation
 from autoreview.review_report import ReviewReport
 from parser.change_analyzer import ChangedLineIssue
 
@@ -114,15 +115,25 @@ def test_format_review_report_with_ai_explanation():
     report = ReviewReport(
         file_name="demo.py",
         issues=issues,
-        ai_explanation=(
-            "Using logging provides better control over application output."
-        ),
+        ai_explanations=[
+            FindingExplanation(
+                rule="print-statement",
+                line_number=2,
+                explanation=(
+                    "Using logging provides better control "
+                    "over application output."
+                ),
+                suggestion="Use the logging module instead of print().",
+            )
+        ],
     )
 
-    output = report.format()
+    result = report.format()
 
-    assert "### AI Explanation" in output
+    assert "### AI Explanation" in result
+    assert "**`print-statement` — Line 2**" in result
     assert (
-        "Using logging provides better control over application output."
-        in output
-    )
+        "Using logging provides better control "
+        "over application output."
+    ) in result
+    assert "**Suggestion:** Use the logging module instead of print()." in result

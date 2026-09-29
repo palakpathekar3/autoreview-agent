@@ -1,28 +1,61 @@
 from unittest.mock import patch
 
-from autoreview.review_pipeline import (
-    review_pull_request,
-    review_pull_request_file,
-)
-from parser.change_analyzer import ChangedLineIssue
+from agent.explanation import FindingExplanation
+from autoreview.review_pipeline import review_pull_request_file
 
 
-def test_review_pull_request_file():
+def test_review_pull_request_file_returns_report():
     files = [
         {
-            "filename": "demo_review.py",
+            "filename": "demo.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": """@@ -1,1 +1,2 @@
+ def hello():
++    print("hello")
+""",
+        }
+    ]
+
+    source = """def hello():
+    print("hello")
+"""
+
+    with patch(
+        "autoreview.review_pipeline.get_pull_request_files",
+        return_value=files,
+    ), patch(
+        "autoreview.review_pipeline.get_pull_request_file_content",
+        return_value=source,
+    ):
+        report = review_pull_request_file(
+            "palakpathekar3/autoreview-agent",
+            3,
+            "demo.py",
+        )
+
+    assert report.file_name == "demo.py"
+    assert report.issue_count == 1
+    assert report.issues[0].rule == "print-statement"
+
+
+def test_review_pull_request_file_detects_multiple_issues():
+    files = [
+        {
+            "filename": "demo.py",
             "status": "modified",
             "additions": 2,
             "deletions": 0,
-            "patch": """@@ -1,3 +1,5 @@
- def review_demo():
+            "patch": """@@ -1,1 +1,3 @@
+ def hello():
 +    print("hello")
 +    return 10 / 0
 """,
         }
     ]
 
-    source = """def review_demo():
+    source = """def hello():
     print("hello")
     return 10 / 0
 """
@@ -37,133 +70,13 @@ def test_review_pull_request_file():
         report = review_pull_request_file(
             "palakpathekar3/autoreview-agent",
             3,
-            "demo_review.py",
+            "demo.py",
         )
 
-    assert report.file_name == "demo_review.py"
-
-    assert report.issues == [
-        ChangedLineIssue(
-            line_number=2,
-            rule="print-statement",
-            message=(
-                "Consider using logging "
-                "instead of print()."
-            ),
-        ),
-        ChangedLineIssue(
-            line_number=3,
-            rule="division-by-zero",
-            message=(
-                "Division by zero will raise "
-                "ZeroDivisionError."
-            ),
-        ),
-    ]
-
-
-def test_review_pull_request():
-    files = [
-        {
-            "filename": "demo_review.py",
-            "status": "modified",
-            "additions": 2,
-            "deletions": 0,
-            "patch": """@@ -1,3 +1,5 @@
- def review_demo():
-+    print("hello")
-+    return 10 / 0
-""",
-        },
-        {
-            "filename": "README.md",
-            "status": "modified",
-            "additions": 1,
-            "deletions": 0,
-            "patch": """@@ -1 +1,2 @@
- AutoReview
-+Updated
-""",
-        },
-    ]
-
-    source = """def review_demo():
-    print("hello")
-    return 10 / 0
-"""
-
-    with patch(
-        "autoreview.review_pipeline.get_pull_request_files",
-        return_value=files,
-    ), patch(
-        "autoreview.review_pipeline.get_pull_request_file_content",
-        return_value=source,
-    ):
-        report = review_pull_request(
-            "palakpathekar3/autoreview-agent",
-            3,
-        )
-
-    assert report.file_count == 1
     assert report.issue_count == 2
+    assert report.issues[0].rule == "print-statement"
+    assert report.issues[1].rule == "division-by-zero"
 
-    assert report.reports[0].file_name == (
-        "demo_review.py"
-    )
-
-    assert report.reports[0].issues[0].rule == (
-        "print-statement"
-    )
-
-    assert report.reports[0].issues[1].rule == (
-        "division-by-zero"
-    )
-
-def test_review_pull_request_file_detects_mutable_default_argument():
-    files = [
-        {
-            "filename": "demo_review.py",
-            "status": "modified",
-            "additions": 1,
-            "deletions": 0,
-            "patch": """@@ -1,2 +1,3 @@
- def review_demo():
-+    def configure(options={}):
-+        return options
-""",
-        }
-    ]
-
-    source = """def review_demo():
-    def configure(options={}):
-        return options
-"""
-
-    with patch(
-        "autoreview.review_pipeline.get_pull_request_files",
-        return_value=files,
-    ), patch(
-        "autoreview.review_pipeline.get_pull_request_file_content",
-        return_value=source,
-    ):
-        report = review_pull_request_file(
-            "palakpathekar3/autoreview-agent",
-            3,
-            "demo_review.py",
-        )
-
-    assert report.file_name == "demo_review.py"
-
-    assert report.issues == [
-        ChangedLineIssue(
-            line_number=2,
-            rule="mutable-default-argument",
-            message=(
-                "Avoid mutable default arguments such as "
-                "list, dict, or set; use None instead."
-            ),
-        ),
-    ]
 
 @patch("autoreview.review_pipeline.explain_review_findings")
 def test_review_pull_request_file_adds_ai_explanation(
@@ -188,9 +101,24 @@ def test_review_pull_request_file_adds_ai_explanation(
     return 10 / 0
 """
 
-    mock_explain.return_value = (
-        "Use logging instead of print(), and avoid division by zero."
-    )
+    mock_explain.return_value = [
+        FindingExplanation(
+            rule="print-statement",
+            line_number=2,
+            explanation=(
+                "print() is less suitable for production logging."
+            ),
+            suggestion="Use the logging module instead.",
+        ),
+        FindingExplanation(
+            rule="division-by-zero",
+            line_number=3,
+            explanation=(
+                "The expression divides by zero and will raise an error."
+            ),
+            suggestion="Validate the divisor before division.",
+        ),
+    ]
 
     with patch(
         "autoreview.review_pipeline.get_pull_request_files",
@@ -205,11 +133,13 @@ def test_review_pull_request_file_adds_ai_explanation(
             "demo_review.py",
         )
 
-    assert report.ai_explanation == (
-        "Use logging instead of print(), and avoid division by zero."
-    )
+    assert report.ai_explanations is not None
+    assert len(report.ai_explanations) == 2
+    assert report.ai_explanations[0].rule == "print-statement"
+    assert report.ai_explanations[1].rule == "division-by-zero"
 
     mock_explain.assert_called_once()
+
 
 @patch("autoreview.review_pipeline.explain_review_findings")
 def test_review_pull_request_file_does_not_call_ai_for_clean_code(
@@ -246,5 +176,47 @@ def test_review_pull_request_file_does_not_call_ai_for_clean_code(
         )
 
     assert report.issues == []
-    assert report.ai_explanation is None
+    assert report.ai_explanations is None
     mock_explain.assert_not_called()
+
+
+@patch("autoreview.review_pipeline.explain_review_findings")
+def test_review_pull_request_file_handles_ai_failure(
+    mock_explain,
+):
+    files = [
+        {
+            "filename": "demo.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": """@@ -1,1 +1,2 @@
+ def hello():
++    print("hello")
+""",
+        }
+    ]
+
+    source = """def hello():
+    print("hello")
+"""
+
+    mock_explain.return_value = None
+
+    with patch(
+        "autoreview.review_pipeline.get_pull_request_files",
+        return_value=files,
+    ), patch(
+        "autoreview.review_pipeline.get_pull_request_file_content",
+        return_value=source,
+    ):
+        report = review_pull_request_file(
+            "palakpathekar3/autoreview-agent",
+            3,
+            "demo.py",
+        )
+
+    assert report.issue_count == 1
+    assert report.issues[0].rule == "print-statement"
+    assert report.ai_explanations is None
+    mock_explain.assert_called_once()

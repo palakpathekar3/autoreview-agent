@@ -59,10 +59,10 @@ def review_pull_request_file(
         added_lines,
     )
 
-    ai_explanation = None
+    ai_explanations = None
 
     if issues:
-        ai_explanation = explain_review_findings(
+        ai_explanations = explain_review_findings(
             source_code=source,
             file_name=file_path,
             findings=issues,
@@ -71,7 +71,7 @@ def review_pull_request_file(
     return ReviewReport(
         file_name=file_path,
         issues=issues,
-        ai_explanation=ai_explanation,
+        ai_explanations=ai_explanations,
     )
 
 

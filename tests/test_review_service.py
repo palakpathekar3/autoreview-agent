@@ -1,14 +1,22 @@
 from unittest.mock import patch
 
+from agent.explanation import FindingExplanation
 from agent.review_service import explain_review_findings
 from parser.change_analyzer import ChangedLineIssue
 
 
 @patch("agent.review_service.explain_findings")
 def test_explain_review_findings(mock_explain):
-    mock_explain.return_value = (
-        "Use logging instead of print() for better control."
-    )
+    mock_explain.return_value = [
+        FindingExplanation(
+            rule="print-statement",
+            line_number=1,
+            explanation=(
+                "print() is less suitable for production logging."
+            ),
+            suggestion="Use the logging module instead.",
+        )
+    ]
 
     findings = [
         ChangedLineIssue(
@@ -24,9 +32,14 @@ def test_explain_review_findings(mock_explain):
         findings=findings,
     )
 
-    assert result == (
-        "Use logging instead of print() for better control."
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].rule == "print-statement"
+    assert result[0].line_number == 1
+    assert result[0].explanation == (
+        "print() is less suitable for production logging."
     )
+    assert result[0].suggestion == "Use the logging module instead."
 
     mock_explain.assert_called_once_with(
         source_code="print('hello')",
@@ -39,6 +52,7 @@ def test_explain_review_findings(mock_explain):
             }
         ],
     )
+
 
 @patch("agent.review_service.explain_findings")
 def test_explain_review_findings_returns_none_on_ai_failure(mock_explain):

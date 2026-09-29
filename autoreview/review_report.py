@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from agent.explanation import FindingExplanation
 from autoreview.rules import get_rule
 from parser.change_analyzer import ChangedLineIssue
 
@@ -10,7 +11,7 @@ class ReviewReport:
 
     file_name: str
     issues: list[ChangedLineIssue]
-    ai_explanation: str | None = None
+    ai_explanations: list[FindingExplanation] | None = None
 
     @property
     def issue_count(self) -> int:
@@ -50,14 +51,30 @@ class ReviewReport:
                 )
             )
 
-        if self.ai_explanation:
+        if self.ai_explanations:
             lines.extend(
                 [
                     "",
                     "### AI Explanation",
                     "",
-                    self.ai_explanation,
                 ]
             )
+
+            for explanation in self.ai_explanations:
+                lines.extend(
+                    [
+                        (
+                            f"**`{explanation.rule}` "
+                            f"— Line {explanation.line_number}**"
+                        ),
+                        "",
+                        explanation.explanation,
+                        "",
+                        f"**Suggestion:** {explanation.suggestion}",
+                        "",
+                    ]
+                )
+
+            lines.pop()
 
         return "\n".join(lines)

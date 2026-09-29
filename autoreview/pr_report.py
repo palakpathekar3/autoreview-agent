@@ -60,14 +60,30 @@ class PullRequestReport:
                     )
                 )
 
-            if report.ai_explanation:
+            if report.ai_explanations:
                 lines.extend(
                     [
                         "",
                         "#### AI Explanation",
                         "",
-                        report.ai_explanation,
                     ]
                 )
+
+                for explanation in report.ai_explanations:
+                    lines.extend(
+                        [
+                            (
+                                f"**`{explanation.rule}` — "
+                                f"Line {explanation.line_number}**"
+                            ),
+                            "",
+                            explanation.explanation,
+                            "",
+                            f"**Suggestion:** {explanation.suggestion}",
+                            "",
+                        ]
+                    )
+
+                lines.pop()
 
         return "\n".join(lines)
