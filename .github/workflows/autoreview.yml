@@ -39,3 +39,12 @@ jobs:
       - name: Run tests
         run: |
           python -m pytest
+
+      - name: Run AutoReview
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m autoreview.cli \
+            --repository "${{ github.repository }}" \
+            --pull-request "${{ github.event.pull_request.number }}"

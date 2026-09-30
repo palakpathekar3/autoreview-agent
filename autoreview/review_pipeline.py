@@ -2,6 +2,8 @@ from agent.review_service import explain_review_findings
 from autoreview.github_client import (
     get_pull_request_file_content,
     get_pull_request_files,
+    has_autoreview_comment,
+    post_autoreview_comment,
 )
 from autoreview.pr_report import PullRequestReport
 from autoreview.review_report import ReviewReport
@@ -112,3 +114,33 @@ def review_pull_request(
     return PullRequestReport(
         reports=reports,
     )
+
+def post_review_comment(
+    repository_name: str,
+    pull_request_number: int,
+) -> bool:
+    """
+    Review a pull request and post the AutoReview comment.
+
+    Returns True when a new comment is posted.
+    Returns False when an AutoReview comment already exists.
+    """
+
+    if has_autoreview_comment(
+        repository_name,
+        pull_request_number,
+    ):
+        return False
+
+    report = review_pull_request(
+        repository_name,
+        pull_request_number,
+    )
+
+    post_autoreview_comment(
+        repository_name,
+        pull_request_number,
+        report.format(),
+    )
+
+    return True

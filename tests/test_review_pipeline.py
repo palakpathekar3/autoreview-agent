@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from agent.explanation import FindingExplanation
 from autoreview.review_pipeline import review_pull_request_file
@@ -220,3 +220,110 @@ def test_review_pull_request_file_handles_ai_failure(
     assert report.issues[0].rule == "print-statement"
     assert report.ai_explanations is None
     mock_explain.assert_called_once()
+
+@patch("autoreview.review_pipeline.get_pull_request_files")
+@patch("autoreview.review_pipeline.review_pull_request_file")
+def test_review_pull_request_reviews_python_files(
+    mock_review_file,
+    mock_get_files,
+):
+    files = [
+        {
+            "filename": "demo.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": "@@ -1,1 +1,2 @@\n+print('hello')",
+        },
+        {
+            "filename": "README.md",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": "@@ -1,1 +1,2 @@\n+# Demo",
+        },
+        {
+            "filename": "empty.py",
+            "status": "modified",
+            "additions": 1,
+            "deletions": 0,
+            "patch": None,
+        },
+    ]
+
+    mock_review_file.return_value = Mock()
+
+    mock_get_files.return_value = files
+
+    from autoreview.review_pipeline import review_pull_request
+
+    report = review_pull_request(
+        "palakpathekar3/autoreview-agent",
+        3,
+    )
+
+    assert report.file_count == 1
+    mock_review_file.assert_called_once_with(
+        "palakpathekar3/autoreview-agent",
+        3,
+        "demo.py",
+    )
+
+@patch("autoreview.review_pipeline.post_autoreview_comment")
+@patch("autoreview.review_pipeline.has_autoreview_comment")
+@patch("autoreview.review_pipeline.review_pull_request")
+def test_post_review_comment_skips_existing_comment(
+    mock_review_pr,
+    mock_has_comment,
+    mock_post_comment,
+):
+    from autoreview.review_pipeline import post_review_comment
+
+    mock_has_comment.return_value = True
+
+    result = post_review_comment(
+        "palakpathekar3/autoreview-agent",
+        3,
+    )
+
+    assert result is False
+    mock_review_pr.assert_not_called()
+    mock_post_comment.assert_not_called()
+
+@patch("autoreview.review_pipeline.post_autoreview_comment")
+@patch("autoreview.review_pipeline.has_autoreview_comment")
+@patch("autoreview.review_pipeline.review_pull_request")
+def test_post_review_comment_posts_new_comment(
+    mock_review_pr,
+    mock_has_comment,
+    mock_post_comment,
+):
+    from autoreview.review_pipeline import post_review_comment
+
+    mock_has_comment.return_value = False
+
+    report = Mock()
+    report.format.return_value = (
+        "## AutoReview\n\n"
+        "Found **1 issue(s)**."
+    )
+
+    mock_review_pr.return_value = report
+
+    result = post_review_comment(
+        "palakpathekar3/autoreview-agent",
+        3,
+    )
+
+    assert result is True
+
+    mock_review_pr.assert_called_once_with(
+        "palakpathekar3/autoreview-agent",
+        3,
+    )
+
+    mock_post_comment.assert_called_once_with(
+        "palakpathekar3/autoreview-agent",
+        3,
+        "## AutoReview\n\nFound **1 issue(s)**.",
+    )
